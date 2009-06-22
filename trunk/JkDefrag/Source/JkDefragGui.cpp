@@ -344,6 +344,7 @@ void JKDefragGui::DrawCluster(struct DefragDataStruct *Data,
 	if (Data->TotalClusters == 0) return;
 	if (m_hDC == NULL) return;
 	if (ClusterStart == ClusterEnd) return;
+	if (ClusterStart > Data->TotalClusters) ClusterStart = 0;
 
 	WaitForSingleObject(m_displayMutex,100);
 
