@@ -1,0 +1,104 @@
+/*
+
+  JkDefragScreenSaver
+
+
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  For the full text of the license see the "License gpl.txt" file.
+
+
+
+  Jeroen C. Kessels
+  Internet Engineer
+  http://www.kessels.com/
+
+*/
+
+/* For more information about the structure and commands in this file search
+   for "Resource Compiler" in the MSDN Library, or:
+     http://msdn2.microsoft.com/en-us/library/aa381043.aspx
+   */
+
+#include "winuser.h"
+#include "winnt.h"
+
+STRINGTABLE
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+BEGIN
+  /* The first string in the resources (number 1) is used by Windows as the name of
+     the screen saver in the list of screen savers. */
+  1 L"JkDefrag screensaver"
+  END
+
+1 Icon "jkdefrag.ico"
+
+1 VERSIONINFO
+  FILEVERSION 3,36,0,2
+  PRODUCTVERSION 3,36,0,2
+    BEGIN
+    BLOCK "StringFileInfo"
+      BEGIN
+      BLOCK "040904e4"
+        BEGIN
+        VALUE "ProductName", "JkDefrag"
+        VALUE "ProductVersion", "3.36"
+        VALUE "LegalCopyright", "GNU General Public License"
+        VALUE "CompanyName", "J.C. Kessels"
+        VALUE "FileDescription", "JkDefrag - disk defragmentation and optimization tool"
+        VALUE "FileVersion", "3.36"
+        VALUE "InternalName", "JkDefrag"
+        VALUE "OriginalFilename", "JkDefrag.exe"
+        END
+      END
+    BLOCK "VarFileInfo"
+      BEGIN
+      VALUE "Translation", 0x409, 1252
+      END
+    END
+
+
+#define DLG_SCRNSAVECONFIGURE 2003      /* The setup dialog box always has NameID=2003. */
+/* nameID DIALOG x, y, width, height */
+DLG_SCRNSAVECONFIGURE DIALOG 6, 18, 200, 147
+  LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+  STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+  CAPTION "JkDefrag screensaver setup"
+  FONT 8, "MS Shell Dlg"
+  BEGIN
+
+  /* CTEXT text, id, x, y, width, height [, style [, extended-style]] */
+  CTEXT         "JkDefrag screensaver v3.36", 1001, 0, 2, 200, 8
+
+  LTEXT         "Commandline options (optional):", 1002, 6, 20, 170, 8
+  /* EDITTEXT id, x, y, width, height [[, style [[, extended-style]]]] */
+  EDITTEXT      1003, 5, 30, 189, 13, ES_AUTOHSCROLL
+
+  LTEXT         "Screensaver to run after JkDefrag has finished:", 1004, 5, 51, 180, 8
+  /* COMBOBOX id, x, y, width, height [, style [, extended-style]] */
+  COMBOBOX      1005, 5, 60, 135, 200, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_CHILD | WS_VISIBLE | WS_TABSTOP
+  /* PUSHBUTTON text, id, x, y, width, height [[, style [[, extended-style]]]] */
+  PUSHBUTTON    "Settings...", 1006, 144, 60, 51, 13
+
+  LTEXT         "Do not defrag if last run was less than", 1007, 5, 85, 180, 8
+  /* COMBOBOX id, x, y, width, height [, style [, extended-style]] */
+  COMBOBOX      1008, 127, 83, 30, 200, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_CHILD | WS_VISIBLE | WS_TABSTOP
+  LTEXT         "hours ago.", 1009, 160, 85, 50, 8
+
+  LTEXT         "Status bar:", 1010, 5, 107, 50, 8
+  /* COMBOBOX id, x, y, width, height [, style [, extended-style]] */
+  COMBOBOX      1011, 45, 105, 150, 200, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_CHILD | WS_VISIBLE | WS_TABSTOP
+
+  /* PUSHBUTTON text, id, x, y, width, height [[, style [[, extended-style]]]] */
+  PUSHBUTTON    "OK", 1012, 80, 128, 40, 13
+
+  END
