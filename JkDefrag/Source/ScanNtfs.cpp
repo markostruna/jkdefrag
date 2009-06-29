@@ -1030,11 +1030,11 @@ struct FragmentListStruct **MftBitmapFragments,
 
 			/* Draw the item on the screen. */
 			m_jkGui->ShowAnalyze(Data,Item);
-			if (*Data->RedrawScreen == NO) {
+//			if (*Data->RedrawScreen == NO) {
 				ColorizeItem(Data,Item,0,0,NO);
-			} else {
-				ShowDiskmap(Data);
-			}
+//			} else {
+//				m_jkGui->ShowDiskmap(Data);
+//			}
 
 			if (Stream != NULL) Stream = Stream->Next;
 		} while (Stream != NULL);

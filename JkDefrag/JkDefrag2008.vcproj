@@ -251,6 +251,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\Resource\resource.h"
+				>
+			</File>
+			<File
 				RelativePath=".\Header\ScanFat.h"
 				>
 			</File>
