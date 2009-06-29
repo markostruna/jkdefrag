@@ -378,9 +378,6 @@ WCHAR *GetLongPath(struct DefragDataStruct *Data, struct ItemStruct *Item) {
 	return(Path);
 }
 
-
-
-
 /* Slow the program down. */
 void SlowDown(struct DefragDataStruct *Data) {
 	struct __timeb64 Time;
@@ -1112,92 +1109,124 @@ int IsFragmented(struct ItemStruct *Item, ULONG64 Offset, ULONG64 Size) {
 part of the item. If Undraw=YES then remove the item from the screen.
 Note: the offset and size of the highlight block is in absolute clusters,
 not virtual clusters. */
-void ColorizeItem(
-struct DefragDataStruct *Data,
-struct ItemStruct *Item,
-	ULONG64 BusyOffset,           /* Number of first cluster to be highlighted. */
-	ULONG64 BusySize,                  /* Number of clusters to be highlighted. */
-	int UnDraw) {                    /* YES to undraw the file from the screen. */
-		struct FragmentListStruct *Fragment;
-		ULONG64 Vcn;
-		ULONG64 RealVcn;
-		ULONG64 SegmentBegin;
-		ULONG64 SegmentEnd;
-		int Fragmented;                 /* YES: file is fragmented. */
-		int Color;
-		int i;
+void ColorizeItem(struct DefragDataStruct *Data,
+				struct ItemStruct *Item,
+				ULONG64 BusyOffset,              /* Number of first cluster to be highlighted. */
+				ULONG64 BusySize,                /* Number of clusters to be highlighted. */
+				int UnDraw)                      /* YES to undraw the file from the screen. */
+{
+	struct FragmentListStruct *Fragment;
 
-		/* Determine if the item is fragmented. */
-		Fragmented = IsFragmented(Item,0,Item->Clusters);
+	ULONG64 Vcn;
+	ULONG64 RealVcn;
 
-		/* Walk through all the fragments of the file. */
-		Vcn = 0;
-		RealVcn = 0;
-		Fragment = Item->Fragments;
-		while (Fragment != NULL) {
-			/* Ignore virtual fragments. They do not occupy space on disk and do not
-			require colorization. */
-			if (Fragment->Lcn != VIRTUALFRAGMENT) {
+	ULONG64 SegmentBegin;
+	ULONG64 SegmentEnd;
 
-				/* Walk through all the segments of the file. A segment is usually
-				the same as a fragment, but if a fragment spans across a boundary
-				then we must determine the color of the left and right parts
-				individually. So we pretend the fragment is divided into segments
-				at the various possible boundaries. */
-				SegmentBegin = RealVcn;
-				while (SegmentBegin < RealVcn + Fragment->NextVcn - Vcn) {
-					SegmentEnd = RealVcn + Fragment->NextVcn - Vcn;
+	int Fragmented;                 /* YES: file is fragmented. */
+	int Color;
+	int i;
 
-					/* Determine the color with which to draw this segment. */
-					if (UnDraw == NO) {
-						Color = JKDefragStruct::COLORUNFRAGMENTED;
-						if (Item->SpaceHog == YES) Color = JKDefragStruct::COLORSPACEHOG;
-						if (Fragmented == YES) Color = JKDefragStruct::COLORFRAGMENTED;
-						if (Item->Unmovable == YES) Color = JKDefragStruct::COLORUNMOVABLE;
-						if (Item->Exclude == YES) Color = JKDefragStruct::COLORUNMOVABLE;
-						if ((Vcn + SegmentBegin - RealVcn < BusyOffset) &&
-							(Vcn + SegmentEnd - RealVcn > BusyOffset)) {
-								SegmentEnd = RealVcn + BusyOffset - Vcn;
-						}
-						if ((Vcn + SegmentBegin - RealVcn >= BusyOffset) &&
-							(Vcn + SegmentBegin - RealVcn < BusyOffset + BusySize)) {
-								if (Vcn + SegmentEnd - RealVcn > BusyOffset + BusySize) {
-									SegmentEnd = RealVcn + BusyOffset + BusySize - Vcn;
-								}
-								Color = JKDefragStruct::COLORBUSY;
-						}
-					} else {
-						Color = JKDefragStruct::COLOREMPTY;
-						for (i = 0; i < 3; i++) {
-							if ((Fragment->Lcn + SegmentBegin - RealVcn < Data->MftExcludes[i].Start) &&
-								(Fragment->Lcn + SegmentEnd - RealVcn > Data->MftExcludes[i].Start)) {
-									SegmentEnd = RealVcn + Data->MftExcludes[i].Start - Fragment->Lcn;
-							}
-							if ((Fragment->Lcn + SegmentBegin - RealVcn >= Data->MftExcludes[i].Start) &&
-								(Fragment->Lcn + SegmentBegin - RealVcn < Data->MftExcludes[i].End)) {
-									if (Fragment->Lcn + SegmentEnd - RealVcn > Data->MftExcludes[i].End) {
-										SegmentEnd = RealVcn + Data->MftExcludes[i].End - Fragment->Lcn;
-									}
-									Color = JKDefragStruct::COLORMFT;
-							}
-						}
-					}
+	/* Determine if the item is fragmented. */
+	Fragmented = IsFragmented(Item,0,Item->Clusters);
 
-					/* Colorize the segment. */
-					m_jkGui->DrawCluster(Data,Fragment->Lcn + SegmentBegin - RealVcn,
-						Fragment->Lcn + SegmentEnd - RealVcn,Color);
+	/* Walk through all the fragments of the file. */
+	Vcn = 0;
+	RealVcn = 0;
 
-					/* Next segment. */
-					SegmentBegin = SegmentEnd;
-				}
+	Fragment = Item->Fragments;
 
-				/* Next fragment. */
-				RealVcn = RealVcn + Fragment->NextVcn - Vcn;
-			}
-
+	while (Fragment != NULL)
+	{
+		/*
+		Ignore virtual fragments. They do not occupy space on disk and do not require colorization.
+		*/
+		if (Fragment->Lcn == VIRTUALFRAGMENT)
+		{
 			Vcn = Fragment->NextVcn;
 			Fragment = Fragment->Next;
+
+			continue;
 		}
+
+		/*
+		Walk through all the segments of the file. A segment is usually
+		the same as a fragment, but if a fragment spans across a boundary
+		then we must determine the color of the left and right parts
+		individually. So we pretend the fragment is divided into segments
+		at the various possible boundaries.
+		*/
+		SegmentBegin = RealVcn;
+
+		while (SegmentBegin < RealVcn + Fragment->NextVcn - Vcn)
+		{
+			SegmentEnd = RealVcn + Fragment->NextVcn - Vcn;
+
+			/* Determine the color with which to draw this segment. */
+			if (UnDraw == NO)
+			{
+				Color = JKDefragStruct::COLORUNFRAGMENTED;
+
+				if (Item->SpaceHog == YES) Color = JKDefragStruct::COLORSPACEHOG;
+				if (Fragmented == YES) Color = JKDefragStruct::COLORFRAGMENTED;
+				if (Item->Unmovable == YES) Color = JKDefragStruct::COLORUNMOVABLE;
+				if (Item->Exclude == YES) Color = JKDefragStruct::COLORUNMOVABLE;
+
+				if ((Vcn + SegmentBegin - RealVcn < BusyOffset) &&
+					(Vcn + SegmentEnd - RealVcn > BusyOffset))
+				{
+					SegmentEnd = RealVcn + BusyOffset - Vcn;
+				}
+
+				if ((Vcn + SegmentBegin - RealVcn >= BusyOffset) &&
+					(Vcn + SegmentBegin - RealVcn < BusyOffset + BusySize))
+				{
+					if (Vcn + SegmentEnd - RealVcn > BusyOffset + BusySize)
+					{
+						SegmentEnd = RealVcn + BusyOffset + BusySize - Vcn;
+					}
+
+					Color = JKDefragStruct::COLORBUSY;
+				}
+			}
+			else
+			{
+				Color = JKDefragStruct::COLOREMPTY;
+
+				for (i = 0; i < 3; i++)
+				{
+					if ((Fragment->Lcn + SegmentBegin - RealVcn < Data->MftExcludes[i].Start) &&
+						(Fragment->Lcn + SegmentEnd - RealVcn > Data->MftExcludes[i].Start))
+					{
+						SegmentEnd = RealVcn + Data->MftExcludes[i].Start - Fragment->Lcn;
+					}
+
+					if ((Fragment->Lcn + SegmentBegin - RealVcn >= Data->MftExcludes[i].Start) &&
+						(Fragment->Lcn + SegmentBegin - RealVcn < Data->MftExcludes[i].End))
+					{
+						if (Fragment->Lcn + SegmentEnd - RealVcn > Data->MftExcludes[i].End)
+						{
+							SegmentEnd = RealVcn + Data->MftExcludes[i].End - Fragment->Lcn;
+						}
+
+						Color = JKDefragStruct::COLORMFT;
+					}
+				}
+			}
+
+			/* Colorize the segment. */
+			m_jkGui->DrawCluster(Data,Fragment->Lcn + SegmentBegin - RealVcn, Fragment->Lcn + SegmentEnd - RealVcn,Color);
+
+			/* Next segment. */
+			SegmentBegin = SegmentEnd;
+		}
+
+		/* Next fragment. */
+		RealVcn = RealVcn + Fragment->NextVcn - Vcn;
+
+		Vcn = Fragment->NextVcn;
+		Fragment = Fragment->Next;
+	}
 }
 
 
@@ -1210,13 +1239,14 @@ to "2" (busy) when the subroutine starts. If another thread changes it to
 "1" (request) while the subroutine is busy then it will immediately exit
 without completing the redraw. When redrawing is completely finished the
 flag is set to "0" (no). */
-void ShowDiskmap(struct DefragDataStruct *Data) {
+/*
+void ShowDiskmap2(struct DefragDataStruct *Data) {
 	struct ItemStruct *Item;
 	STARTING_LCN_INPUT_BUFFER BitmapParam;
 	struct {
 		ULONG64 StartingLcn;
 		ULONG64 BitmapSize;
-		BYTE Buffer[65536];               /* Most efficient if binary multiple. */
+		BYTE Buffer[65536];               / * Most efficient if binary multiple. * /
 	} BitmapData;
 	ULONG64 Lcn;
 	ULONG64 ClusterStart;
@@ -1229,18 +1259,18 @@ void ShowDiskmap(struct DefragDataStruct *Data) {
 	DWORD w;
 	int i;
 
-	*Data->RedrawScreen = 2;                       /* Set the flag to "busy". */
+	*Data->RedrawScreen = 2;                       / * Set the flag to "busy". * /
 
-	/* Exit if the library is not processing a disk yet. */
+	/ * Exit if the library is not processing a disk yet. * /
 	if (Data->Disk.VolumeHandle == NULL) {
-		*Data->RedrawScreen = 0;                       /* Set the flag to "no". */
+		*Data->RedrawScreen = 0;                       / * Set the flag to "no". * /
 		return;
 	}
 
-	/* Clear screen. */
+	/ * Clear screen. * /
 	m_jkGui->ClearScreen(NULL);
 
-	/* Show the map of all the clusters in use. */
+	/ * Show the map of all the clusters in use. * /
 	Lcn = 0;
 	ClusterStart = 0;
 	PrevInUse = 1;
@@ -1249,7 +1279,7 @@ void ShowDiskmap(struct DefragDataStruct *Data) {
 		if (*Data->RedrawScreen != 2) break;
 		if (Data->Disk.VolumeHandle == INVALID_HANDLE_VALUE) break;
 
-		/* Fetch a block of cluster data. */
+		/ * Fetch a block of cluster data. * /
 		BitmapParam.StartingLcn.QuadPart = Lcn;
 		ErrorCode = DeviceIoControl(Data->Disk.VolumeHandle,FSCTL_GET_VOLUME_BITMAP,
 			&BitmapParam,sizeof(BitmapParam),&BitmapData,sizeof(BitmapData),&w,NULL);
@@ -1260,10 +1290,10 @@ void ShowDiskmap(struct DefragDataStruct *Data) {
 		}
 		if ((ErrorCode != NO_ERROR) && (ErrorCode != ERROR_MORE_DATA)) break;
 
-		/* Sanity check. */
+		/ * Sanity check. * /
 		if (Lcn >= BitmapData.StartingLcn + BitmapData.BitmapSize) break;
 
-		/* Analyze the clusterdata. We resume where the previous block left off. */
+		/ * Analyze the clusterdata. We resume where the previous block left off. * /
 		Lcn = BitmapData.StartingLcn;
 		Index = 0;
 		Mask = 1;
@@ -1271,10 +1301,10 @@ void ShowDiskmap(struct DefragDataStruct *Data) {
 		if (BitmapData.BitmapSize / 8 < IndexMax) IndexMax = (int)(BitmapData.BitmapSize / 8);
 		while ((Index < IndexMax) && (*Data->Running == RUNNING)) {
 			InUse = (BitmapData.Buffer[Index] & Mask);
-			/* If at the beginning of the disk then copy the InUse value as our
-			starting value. */
+			/ * If at the beginning of the disk then copy the InUse value as our
+			starting value. * /
 			if (Lcn == 0) PrevInUse = InUse;
-			/* At the beginning and end of an Exclude draw the cluster. */
+			/ * At the beginning and end of an Exclude draw the cluster. * /
 			if ((Lcn == Data->MftExcludes[0].Start) || (Lcn == Data->MftExcludes[0].End) ||
 				(Lcn == Data->MftExcludes[1].Start) || (Lcn == Data->MftExcludes[1].End) ||
 				(Lcn == Data->MftExcludes[2].Start) || (Lcn == Data->MftExcludes[2].End)) {
@@ -1291,11 +1321,11 @@ void ShowDiskmap(struct DefragDataStruct *Data) {
 					PrevInUse = 1;
 					ClusterStart = Lcn;
 			}
-			if ((PrevInUse == 0) && (InUse != 0)) {          /* Free */
+			if ((PrevInUse == 0) && (InUse != 0)) {          / * Free * /
 				m_jkGui->DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
 				ClusterStart = Lcn;
 			}
-			if ((PrevInUse != 0) && (InUse == 0)) {          /* In use */
+			if ((PrevInUse != 0) && (InUse == 0)) {          / * In use * /
 				m_jkGui->DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
 				ClusterStart = Lcn;
 			}
@@ -1313,24 +1343,24 @@ void ShowDiskmap(struct DefragDataStruct *Data) {
 		(Lcn < BitmapData.StartingLcn + BitmapData.BitmapSize));
 
 	if ((Lcn > 0) && (*Data->RedrawScreen == 2)) {
-		if (PrevInUse == 0) {          /* Free */
+		if (PrevInUse == 0) {          / * Free * /
 			m_jkGui->DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
 		}
-		if (PrevInUse != 0) {          /* In use */
+		if (PrevInUse != 0) {          / * In use * /
 			m_jkGui->DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
 		}
 	}
 
-	/* Show the MFT zones. */
+	/ * Show the MFT zones. * /
 	for (i = 0; i < 3; i++) {
 		if (*Data->RedrawScreen != 2) break;
 		if (Data->MftExcludes[i].Start <= 0) continue;
 		m_jkGui->DrawCluster(Data,Data->MftExcludes[i].Start,Data->MftExcludes[i].End,JKDefragStruct::COLORMFT);
 	}
 
-	/* Colorize all the files on the screen.
+	/ * Colorize all the files on the screen.
 	Note: the "$BadClus" file on NTFS disks maps the entire disk, so we have to
-	ignore it. */
+	ignore it. * /
 	for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item)) {
 		if (*Data->Running != RUNNING) break;
 		if (*Data->RedrawScreen != 2) break;
@@ -1340,9 +1370,10 @@ void ShowDiskmap(struct DefragDataStruct *Data) {
 		ColorizeItem(Data,Item,0,0,NO);
 	}
 
-	/* Set the flag to "no". */
+	/ * Set the flag to "no". * /
 	if (*Data->RedrawScreen == 2) *Data->RedrawScreen = 0;
 }
+*/
 
 
 
@@ -1797,13 +1828,12 @@ struct ItemStruct *Item,
 					m_jkGui->ShowMove(Item,MoveParams.ClusterCount,FromLcn,MoveParams.StartingLcn.QuadPart,
 						MoveParams.StartingVcn.QuadPart);
 
-					/* Draw the item and the destination clusters on the screen in the BUSY
-					color. */
-					if (*Data->RedrawScreen == 0) {
+					/* Draw the item and the destination clusters on the screen in the BUSY	color. */
+//					if (*Data->RedrawScreen == 0) {
 						ColorizeItem(Data,Item,MoveParams.StartingVcn.QuadPart,MoveParams.ClusterCount,NO);
-					} else {
-						ShowDiskmap(Data);
-					}
+//					} else {
+//						m_jkGui->ShowDiskmap(Data);
+//					}
 					m_jkGui->DrawCluster(Data,MoveParams.StartingLcn.QuadPart,
 						MoveParams.StartingLcn.QuadPart + MoveParams.ClusterCount,JKDefragStruct::COLORBUSY);
 
@@ -1878,11 +1908,12 @@ struct ItemStruct *Item,
 		TreeDetach(Data,Item);
 		Result = GetFragments(Data,Item,FileHandle);
 		TreeInsert(Data,Item);
-		if (*Data->RedrawScreen == 0) {
+
+//		if (*Data->RedrawScreen == 0) {
 			ColorizeItem(Data,Item,0,0,NO);
-		} else {
-			ShowDiskmap(Data);
-		}
+//		} else {
+//			m_jkGui->ShowDiskmap(Data);
+//		}
 
 		/* If Windows reported an error while moving the item then show the
 		errormessage and return NO. */
@@ -2781,11 +2812,11 @@ void ScanDir(struct DefragDataStruct *Data, WCHAR *Mask, struct ItemStruct *Pare
 		if ((Item->Clusters == 0) || (Item->Fragments == NULL)) continue;
 
 		/* Draw the item on the screen. */
-		if (*Data->RedrawScreen == 0) {
+//		if (*Data->RedrawScreen == 0) {
 			ColorizeItem(Data,Item,0,0,NO);
-		} else {
-			ShowDiskmap(Data);
-		}
+//		} else {
+//			m_jkGui->ShowDiskmap(Data);
+//		}
 
 		/* Show debug info about the file. */
 		/* Show debug message: "%I64d clusters at %I64d, %I64d bytes" */
@@ -2920,11 +2951,12 @@ void AnalyzeVolume(struct DefragDataStruct *Data) {
 	m_jkGui->ShowAnalyze(NULL,NULL);
 
 	/* Walk through all the items one by one. */
-	for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item)) {
+	for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item))
+	{
 		if (*Data->Running != RUNNING) break;
 
 		/* If requested then redraw the diskmap. */
-		if (*Data->RedrawScreen == 1) ShowDiskmap(Data);
+//		if (*Data->RedrawScreen == 1) m_jkGui->ShowDiskmap(Data);
 
 		/* Construct the full path's of the item. The MFT contains only the filename, plus
 		a pointer to the directory. We have to construct the full paths's by joining
@@ -4290,7 +4322,8 @@ void DefragOnePath(struct DefragDataStruct *Data, WCHAR *Path, int Mode) {
 	m_jkGui->ShowDebug(0,NULL,L"Input mask: %s",Data->IncludeMask);
 
 	/* Defragment and optimize. */
-	ShowDiskmap(Data);
+	m_jkGui->ShowDiskmap(Data);
+
 	if (*Data->Running == RUNNING) AnalyzeVolume(Data);
 	if ((*Data->Running == RUNNING) && (Mode == 1)) {
 		Defragment(Data);
@@ -4483,7 +4516,7 @@ void RunJkDefrag(
 				WCHAR **Excludes,
 				WCHAR **SpaceHogs,
 				int *Running,
-				int *RedrawScreen,
+//				int *RedrawScreen,
 				WCHAR **DebugMsg)
 {
 	struct DefragDataStruct Data;
@@ -4491,7 +4524,7 @@ void RunJkDefrag(
 	WCHAR *Drives;
 	WCHAR *Drive;
 	int DefaultRunning;
-	int DefaultRedrawScreen;
+//	int DefaultRedrawScreen;
 	DWORD NtfsDisableLastAccessUpdate;
 	LONG Result;
 	HKEY Key;
@@ -4510,12 +4543,15 @@ void RunJkDefrag(
 		Data.Running = Running;
 	}
 	*Data.Running = RUNNING;
+
+/*
 	if (RedrawScreen == NULL) {
 		Data.RedrawScreen = &DefaultRedrawScreen;
 	} else {
 		Data.RedrawScreen = RedrawScreen;
 	}
 	*Data.RedrawScreen = 0;
+*/
 
 	if ((DebugMsg == NULL) || (DebugMsg[0] == NULL)) {
 		Data.DebugMsg = DefaultDebugMsg;

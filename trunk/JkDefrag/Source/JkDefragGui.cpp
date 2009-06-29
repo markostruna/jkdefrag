@@ -9,10 +9,12 @@ JKDefragGui *JKDefragGui::m_jkDefragGui = 0;
 
 JKDefragGui::JKDefragGui()
 {
+	m_bmp = NULL;
+
 	jkStruct = new JKDefragStruct();
 
-	m_squareSize = 10;
-	m_clusterSquares = NULL;
+	m_squareSize = 12;
+//	m_clusterSquares = NULL;
 	m_numDiskSquares = 0;
 
 	m_offsetX = 6;
@@ -29,7 +31,7 @@ JKDefragGui::JKDefragGui()
 
 	for (i = 0; i < 6; i++) *Messages[i] = '\0';
 
-	RedrawScreen = 0;
+//	RedrawScreen = 0;
 }
 
 JKDefragGui::~JKDefragGui()
@@ -37,9 +39,16 @@ JKDefragGui::~JKDefragGui()
 	delete jkStruct;
 	delete m_jkDefragGui;
 
+/*
 	if (m_jkDefragGui->m_clusterSquares != NULL)
 	{
 		delete[] m_jkDefragGui->m_clusterSquares;
+	}
+*/
+
+	if (m_bmp != NULL)
+	{
+		delete m_bmp;
 	}
 }
 
@@ -55,8 +64,9 @@ JKDefragGui *JKDefragGui::getInstance()
 
 int JKDefragGui::Initialize(HINSTANCE hInstance, int nCmdShow, JKDefragLog *jkLog, int debugLevel)
 {
-	GdiplusStartupInput gdiplusStartupInput;
 	ULONG_PTR gdiplusToken;
+
+	GdiplusStartupInput gdiplusStartupInput;
 
 	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
@@ -65,20 +75,24 @@ int JKDefragGui::Initialize(HINSTANCE hInstance, int nCmdShow, JKDefragLog *jkLo
 
 	m_displayMutex = CreateMutex(NULL,FALSE,"JKDefrag");
 
-	WindowClass.cbClsExtra = 0;
-	WindowClass.cbWndExtra = 0;
-	WindowClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-	WindowClass.hCursor = LoadCursor(NULL,IDC_ARROW);
-	WindowClass.hIcon = LoadIcon(NULL,MAKEINTRESOURCE(1));
-	WindowClass.hInstance = hInstance;
-	WindowClass.lpfnWndProc = (WNDPROC)JKDefragGui::ProcessMessagefn;
-	WindowClass.lpszClassName = "MyClass";
-	WindowClass.lpszMenuName = NULL;
-	WindowClass.style = CS_HREDRAW | CS_VREDRAW;
-	WindowClass.cbSize = sizeof(WNDCLASSEX);
-	WindowClass.hIconSm = LoadIcon(hInstance,MAKEINTRESOURCE(1));
+	m_wndClass.cbClsExtra    = 0;
+	m_wndClass.cbWndExtra    = 0;
+	m_wndClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+	m_wndClass.hCursor       = LoadCursor(NULL,IDC_ARROW);
+	m_wndClass.hIcon         = LoadIcon(NULL,MAKEINTRESOURCE(1));
+	m_wndClass.hInstance     = hInstance;
+	m_wndClass.lpfnWndProc   = (WNDPROC)JKDefragGui::ProcessMessagefn;
+	m_wndClass.lpszClassName = "MyClass";
+	m_wndClass.lpszMenuName  = NULL;
+	m_wndClass.style         = CS_HREDRAW | CS_VREDRAW;
+	m_wndClass.cbSize        = sizeof(WNDCLASSEX);
+	m_wndClass.hIconSm       = LoadIcon(hInstance,MAKEINTRESOURCE(1));
 
-	if (RegisterClassEx(&WindowClass) == 0)
+	CHAR koko[100];
+
+	LoadString(hInstance,2,koko, 99);
+
+	if (RegisterClassEx(&m_wndClass) == 0)
 	{
 		MessageBoxW(NULL,L"Cannot register class",jkStruct->VERSIONTEXT,MB_ICONEXCLAMATION | MB_OK);
 		return(0);
@@ -97,13 +111,14 @@ int JKDefragGui::Initialize(HINSTANCE hInstance, int nCmdShow, JKDefragLog *jkLo
 	ShowWindow(m_hWnd,nCmdShow);
 	UpdateWindow(m_hWnd);
 
-//	SetTimer(m_hWnd,1,100,NULL);
-	InvalidateRect(m_hWnd,NULL,FALSE);
+	SetTimer(m_hWnd,1,300,NULL);
+
+//	InvalidateRect(m_hWnd,NULL,FALSE);
 
 	return 1;
 }
 
-int JKDefragGui::DoModal()
+WPARAM JKDefragGui::DoModal()
 {
 	int GetMessageResult;
 
@@ -120,7 +135,7 @@ int JKDefragGui::DoModal()
 		DispatchMessage(&Message);
 	}
 
-	return 0;
+	return Message.wParam;;
 }
 
 void JKDefragGui::setDisplayData(HDC hdc)
@@ -133,10 +148,12 @@ void JKDefragGui::setDisplayData(HDC hdc)
 
 	m_clientWindowSize = clientWindowSize;
 
+/*
 	if (m_clusterSquares != NULL)
 	{
 		delete[] m_clusterSquares;
 	}
+*/
 
 	m_topHeight = 33;
 
@@ -145,15 +162,15 @@ void JKDefragGui::setDisplayData(HDC hdc)
 		m_topHeight = 49;
 	}
 
-	m_diskAreaWidth  = clientWindowSize.GetRight()  - m_offsetX * 2;
-	m_diskAreaHeight = clientWindowSize.GetBottom() - m_topHeight - m_offsetY * 2;
+	m_diskAreaSize.Width  = clientWindowSize.Width  - m_offsetX * 2;
+	m_diskAreaSize.Height = clientWindowSize.Height - m_topHeight - m_offsetY * 2;
 
-	m_numDiskSquaresX = (int)(m_diskAreaWidth  / m_squareSize);
-	m_numDiskSquaresY = (int)(m_diskAreaHeight / m_squareSize);
+	m_numDiskSquaresX = (int)(m_diskAreaSize.Width  / m_squareSize);
+	m_numDiskSquaresY = (int)(m_diskAreaSize.Height / m_squareSize);
 
 	m_numDiskSquares  = m_numDiskSquaresX * m_numDiskSquaresY;
 
-	m_clusterSquares = new clusterSquareStruct[m_numDiskSquares];
+//	m_clusterSquares = new clusterSquareStruct[m_numDiskSquares];
 
 	for (int ii = 0; ii < m_numDiskSquares; ii++)
 	{
@@ -164,6 +181,15 @@ void JKDefragGui::setDisplayData(HDC hdc)
 	m_realOffsetX = (int)((m_clientWindowSize.Width - m_numDiskSquaresX * m_squareSize) * 0.5);
 	m_realOffsetY = (int)((m_clientWindowSize.Height - m_topHeight - m_numDiskSquaresY * m_squareSize) * 0.5);
 
+	if (m_bmp != NULL)
+	{
+		delete m_bmp;
+
+		m_bmp = NULL;
+	}
+
+	m_bmp = new Bitmap(m_clientWindowSize.Width, m_clientWindowSize.Height);
+
 //	Color bottomPartColor;
 //	bottomPartColor.SetFromCOLORREF(RGB(255,255,255));
 
@@ -173,7 +199,7 @@ void JKDefragGui::setDisplayData(HDC hdc)
 //	graphics.FillRectangle(&bottomPartBrush, drawArea);
 
 	/* Ask defragger to completely redraw the screen. */
-	RedrawScreen = 0;
+//	RedrawScreen = 0;
 }
 
 /* Callback: clear the screen. */
@@ -201,7 +227,8 @@ void JKDefragGui::ClearScreen(WCHAR *Format, ...)
 
 	va_end(VarArgs);
 
-	InvalidateRect(m_hWnd,NULL,FALSE);
+	PaintImage(m_hDC);
+//	InvalidateRect(m_hWnd,NULL,FALSE);
 }
 
 /* Callback: whenever an item (file, directory) is moved on disk. */
@@ -261,8 +288,9 @@ void JKDefragGui::ShowMove(struct ItemStruct *Item,
 				Item->LongPath,Clusters,FromLcn,ToLcn);
 		}
 	}
+	PaintImage(m_hDC);
 
-	InvalidateRect(m_hWnd,NULL,FALSE);
+//	InvalidateRect(m_hWnd,NULL,FALSE);
 }
 
 
@@ -290,8 +318,9 @@ void JKDefragGui::ShowAnalyze(struct DefragDataStruct *Data, struct ItemStruct *
 	{
 		*(Messages[4]) = '\0';
 	}
+	PaintImage(m_hDC);
 
-	InvalidateRect(m_hWnd,NULL,FALSE);
+//	InvalidateRect(m_hWnd,NULL,FALSE);
 }
 
 /* Callback: show a debug message. */
@@ -316,8 +345,9 @@ void  JKDefragGui::ShowDebug(int Level, struct ItemStruct *Item, WCHAR *Format, 
 	vswprintf_s(Messages[5],50000,Format,VarArgs);
 	m_jkLog->LogMessage(Format, VarArgs);
 	va_end(VarArgs);
+	PaintImage(m_hDC);
 
-	InvalidateRect(m_hWnd,NULL,FALSE);
+//	InvalidateRect(m_hWnd,NULL,FALSE);
 }
 
 /* Callback: paint a cluster on the screen in a color. */
@@ -344,7 +374,7 @@ void JKDefragGui::DrawCluster(struct DefragDataStruct *Data,
 	if (Data->TotalClusters == 0) return;
 	if (m_hDC == NULL) return;
 	if (ClusterStart == ClusterEnd) return;
-	if (ClusterStart > Data->TotalClusters) ClusterStart = 0;
+//	if (ClusterStart > Data->TotalClusters) ClusterStart = 0;
 
 	WaitForSingleObject(m_displayMutex,100);
 
@@ -368,7 +398,7 @@ void JKDefragGui::DrawCluster(struct DefragDataStruct *Data,
 			clusterInfo[ii] = JKDefragStruct::COLOREMPTY;
 		}
 
-		RedrawScreen = 0;
+//		RedrawScreen = 0;
 
 		return;
 	} 
@@ -386,8 +416,9 @@ void JKDefragGui::DrawCluster(struct DefragDataStruct *Data,
 	FillSquares(clusterStartSquareNum, clusterEndSquareNum);
 
 	ReleaseMutex(m_displayMutex);
+	PaintImage(m_hDC);
 
-	InvalidateRect(m_hWnd,NULL,FALSE);
+//	InvalidateRect(m_hWnd,NULL,FALSE);
 }
 
 /* Callback: just before the defragger starts a new Phase, and when it finishes. */
@@ -734,10 +765,10 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 	}
 }
 
-/* Paint the screen (refresh). */
-void JKDefragGui::OnPaint(HDC hdc)
+
+void JKDefragGui::PaintImage(HDC hdc)
 {
-	Graphics graphics(hdc);
+	Graphics *graphics = Graphics::FromImage(m_bmp);
 
 	double Done;
 
@@ -759,6 +790,7 @@ void JKDefragGui::OnPaint(HDC hdc)
 	}
 
 	drawArea = windowSize;
+
 	drawArea.Height = m_topHeight + 1;
 
 	Color busyColor;
@@ -766,7 +798,7 @@ void JKDefragGui::OnPaint(HDC hdc)
 
 	SolidBrush busyBrush(busyColor);
 
-	graphics.FillRectangle(&busyBrush, drawArea);
+	graphics->FillRectangle(&busyBrush, drawArea);
 
 	SolidBrush brush(Color::White);
 
@@ -774,31 +806,31 @@ void JKDefragGui::OnPaint(HDC hdc)
 	Font       font(&fontFamily,12,FontStyleRegular, UnitPixel);
 	WCHAR      *text;
 	PointF     pointF(2.0f, 0.0f);
-	
+
 	text = Messages[0];
-	graphics.DrawString(text, -1, &font, pointF, &brush);
+	graphics->DrawString(text, -1, &font, pointF, &brush);
 
 	pointF = PointF(40.0f, 0.0f);
 	text = Messages[1];
-	graphics.DrawString(text, -1, &font, pointF, &brush);
+	graphics->DrawString(text, -1, &font, pointF, &brush);
 
 	pointF = PointF(200.0f, 0.0f);
 	text = Messages[2];
-	graphics.DrawString(text, -1, &font, pointF, &brush);
+	graphics->DrawString(text, -1, &font, pointF, &brush);
 
 	pointF = PointF(280.0f, 0.0f);
 	text = Messages[3];
-	graphics.DrawString(text, -1, &font, pointF, &brush);
+	graphics->DrawString(text, -1, &font, pointF, &brush);
 
 	pointF = PointF(2.0f, 17.0f);
 	text = Messages[4];
-	graphics.DrawString(text, -1, &font, pointF, &brush);
+	graphics->DrawString(text, -1, &font, pointF, &brush);
 
 	if (m_debugLevel > 1)
 	{
 		pointF = PointF(2.0f, 33.0f);
 		text = Messages[5];
-		graphics.DrawString(text, -1, &font, pointF, &brush);
+		graphics->DrawString(text, -1, &font, pointF, &brush);
 	}
 
 
@@ -814,29 +846,29 @@ void JKDefragGui::OnPaint(HDC hdc)
 	SolidBrush bottomPartBrush(bottomPartColor);
 
 	drawArea = Rect(0, m_topHeight + 1, m_clientWindowSize.Width, yy1 - m_topHeight - 2);
-	graphics.FillRectangle(&bottomPartBrush, drawArea);
+	graphics->FillRectangle(&bottomPartBrush, drawArea);
 
 	drawArea = Rect(0, yy2 + 2, m_clientWindowSize.Width, m_clientWindowSize.Height - yy2 - 2);
-	graphics.FillRectangle(&bottomPartBrush, drawArea);
+	graphics->FillRectangle(&bottomPartBrush, drawArea);
 
 	drawArea = Rect(0, yy1 - 1, xx1 - 1, yy2 - yy1 + 3);
-	graphics.FillRectangle(&bottomPartBrush, drawArea);
+	graphics->FillRectangle(&bottomPartBrush, drawArea);
 
 	drawArea = Rect(xx2, yy1 - 1, m_clientWindowSize.Width - xx2, yy2 - yy1 + 3);
-	graphics.FillRectangle(&bottomPartBrush, drawArea);
+	graphics->FillRectangle(&bottomPartBrush, drawArea);
 
 	Pen pen1(Color(0,0,0));
 	Pen pen2(Color(255,255,255));
 
-	graphics.DrawLine(&pen1, xx1, yy2, xx1, yy1);
-	graphics.DrawLine(&pen1, xx1, yy1, xx2, yy1);
-	graphics.DrawLine(&pen1, xx2, yy1, xx2, yy2);
-	graphics.DrawLine(&pen1, xx2, yy2, xx1, yy2);
+	graphics->DrawLine(&pen1, xx1, yy2, xx1, yy1);
+	graphics->DrawLine(&pen1, xx1, yy1, xx2, yy1);
+	graphics->DrawLine(&pen1, xx2, yy1, xx2, yy2);
+	graphics->DrawLine(&pen1, xx2, yy2, xx1, yy2);
 
-	graphics.DrawLine(&pen2, xx1 - 1, yy2 + 1, xx1 - 1, yy1 - 1);
-	graphics.DrawLine(&pen2, xx1 - 1, yy1 - 1, xx2 + 1, yy1 - 1);
-	graphics.DrawLine(&pen2, xx2 + 1, yy1 - 1, xx2 + 1, yy2 + 1);
-	graphics.DrawLine(&pen2, xx2 + 1, yy2 + 1, xx1 - 1, yy2 + 1);
+	graphics->DrawLine(&pen2, xx1 - 1, yy2 + 1, xx1 - 1, yy1 - 1);
+	graphics->DrawLine(&pen2, xx1 - 1, yy1 - 1, xx2 + 1, yy1 - 1);
+	graphics->DrawLine(&pen2, xx2 + 1, yy1 - 1, xx2 + 1, yy2 + 1);
+	graphics->DrawLine(&pen2, xx2 + 1, yy2 + 1, xx1 - 1, yy2 + 1);
 
 	COLORREF colEmpty = Colors[JKDefragStruct::COLOREMPTY];
 	Color colorEmpty;
@@ -919,13 +951,13 @@ void JKDefragGui::OnPaint(HDC hdc)
 		BB = (BB > 255) ? 255 : BB;
 
 		C2.SetFromCOLORREF(RGB((byte)RR, (byte)GG, (byte)BB));
-		
+
 		if (emptyCluster)
 		{
 			Rect drawArea2(xx1, yy1, m_squareSize - 0, m_squareSize - 0);
 
 			LinearGradientBrush BB2(drawArea2,C1,C2,LinearGradientModeVertical);
-			graphics.FillRectangle(&BB2, drawArea2);
+			graphics->FillRectangle(&BB2, drawArea2);
 
 			int lineX1 = drawArea2.X;
 			int lineY1 = drawArea2.Y;
@@ -936,8 +968,8 @@ void JKDefragGui::OnPaint(HDC hdc)
 			int lineX4 = drawArea2.X + m_squareSize - 1;
 			int lineY4 = drawArea2.Y + m_squareSize - 1;
 
-			graphics.DrawLine(&penEmpty, lineX1, lineY1, lineX2, lineY2);
-			graphics.DrawLine(&pen, lineX3, lineY3, lineX4, lineY4);
+			graphics->DrawLine(&penEmpty, lineX1, lineY1, lineX2, lineY2);
+			graphics->DrawLine(&pen, lineX3, lineY3, lineX4, lineY4);
 		}
 		else
 		{
@@ -945,7 +977,7 @@ void JKDefragGui::OnPaint(HDC hdc)
 
 			LinearGradientBrush BB1(drawArea2,C2,C1,LinearGradientModeForwardDiagonal);
 
-			graphics.FillRectangle(&BB1, drawArea2);
+			graphics->FillRectangle(&BB1, drawArea2);
 
 			int lineX1 = drawArea2.X;
 			int lineY1 = drawArea2.Y + m_squareSize - 1;
@@ -954,11 +986,21 @@ void JKDefragGui::OnPaint(HDC hdc)
 			int lineX3 = drawArea2.X + m_squareSize - 1;
 			int lineY3 = drawArea2.Y + m_squareSize - 1;
 
-			graphics.DrawLine(&pen, lineX1, lineY1, lineX3, lineY3);
-			graphics.DrawLine(&pen, lineX2, lineY2, lineX3, lineY3);
+			graphics->DrawLine(&pen, lineX1, lineY1, lineX3, lineY3);
+			graphics->DrawLine(&pen, lineX2, lineY2, lineX3, lineY3);
 		}
 
 	}
+
+	delete graphics;
+
+}
+
+void JKDefragGui::OnPaint(HDC hdc)
+{
+	Graphics graphics(hdc);
+
+	graphics.DrawImage(m_bmp,0,0);
 
 	return;
 }
@@ -977,7 +1019,35 @@ LRESULT CALLBACK JKDefragGui::ProcessMessagefn(
 		return 0;
 
 	case WM_TIMER:
-//		InvalidateRect(hWnd,NULL,FALSE);
+
+/*
+		if (wParam == 333)
+		{
+			PAINTSTRUCT ps;
+
+			WaitForSingleObject(m_jkDefragGui->m_displayMutex,100);
+
+			m_jkDefragGui->m_displayMutex = CreateMutex(NULL,FALSE,"JKDefrag");
+
+			m_jkDefragGui->m_hDC = BeginPaint(hWnd, &ps);
+
+			m_jkDefragGui->setDisplayData(m_jkDefragGui->m_hDC);
+
+			m_jkDefragGui->FillSquares( 0, m_jkDefragGui->m_numDiskSquares);
+
+			m_jkDefragGui->PaintImage(m_jkDefragGui->m_hDC);
+
+			EndPaint(hWnd, &ps);
+
+			ReleaseMutex(m_jkDefragGui->m_displayMutex);
+
+			KillTimer(m_jkDefragGui->m_hWnd, m_jkDefragGui->m_sizeTimer);
+		}
+*/
+
+
+		InvalidateRect(hWnd,NULL,FALSE);
+
 		return 0;
 
 	case WM_PAINT:
@@ -1003,6 +1073,7 @@ LRESULT CALLBACK JKDefragGui::ProcessMessagefn(
 
 	case WM_ERASEBKGND:
 		{
+//			m_jkDefragGui->RedrawScreen = 0;
 			InvalidateRect(m_jkDefragGui->m_hWnd,NULL,FALSE);
 		}
 
@@ -1019,6 +1090,13 @@ LRESULT CALLBACK JKDefragGui::ProcessMessagefn(
 
 	case WM_SIZE:
 		{
+
+/*
+			m_jkDefragGui->m_sizeTimer = SetTimer(m_jkDefragGui->m_hWnd,333,500,NULL);
+*/
+
+
+
 			PAINTSTRUCT ps;
 
 			WaitForSingleObject(m_jkDefragGui->m_displayMutex,100);
@@ -1031,11 +1109,12 @@ LRESULT CALLBACK JKDefragGui::ProcessMessagefn(
 
 			m_jkDefragGui->FillSquares( 0, m_jkDefragGui->m_numDiskSquares);
 
+			m_jkDefragGui->PaintImage(m_jkDefragGui->m_hDC);
+
 			EndPaint(hWnd, &ps);
 
-			InvalidateRect(hWnd,NULL,FALSE);
-
 			ReleaseMutex(m_jkDefragGui->m_displayMutex);
+
 		}
 
 		return 0;
@@ -1106,4 +1185,147 @@ void JKDefragGui::FillSquares( int clusterStartSquareNum, int clusterEndSquareNu
 				clusterSpacehog;
 		}
 	}
+}
+
+/* Show a map on the screen of all the clusters on disk. The map shows
+which clusters are free and which are in use.
+The Data->RedrawScreen flag controls redrawing of the screen. It is set
+to "2" (busy) when the subroutine starts. If another thread changes it to
+"1" (request) while the subroutine is busy then it will immediately exit
+without completing the redraw. When redrawing is completely finished the
+flag is set to "0" (no). */
+void JKDefragGui::ShowDiskmap(struct DefragDataStruct *Data)
+{
+	struct ItemStruct *Item;
+	STARTING_LCN_INPUT_BUFFER BitmapParam;
+	struct {
+		ULONG64 StartingLcn;
+		ULONG64 BitmapSize;
+		BYTE Buffer[65536];               /* Most efficient if binary multiple. */
+	} BitmapData;
+	ULONG64 Lcn;
+	ULONG64 ClusterStart;
+	DWORD ErrorCode;
+	int Index;
+	int IndexMax;
+	BYTE Mask;
+	int InUse;
+	int PrevInUse;
+	DWORD w;
+	int i;
+
+//	*Data->RedrawScreen = 2;                       /* Set the flag to "busy". */
+
+	/* Exit if the library is not processing a disk yet. */
+	if (Data->Disk.VolumeHandle == NULL) {
+//		*Data->RedrawScreen = 0;                       /* Set the flag to "no". */
+		return;
+	}
+
+	/* Clear screen. */
+	ClearScreen(NULL);
+
+	/* Show the map of all the clusters in use. */
+	Lcn = 0;
+	ClusterStart = 0;
+	PrevInUse = 1;
+	do {
+		if (*Data->Running != RUNNING) break;
+//		if (*Data->RedrawScreen != 2) break;
+		if (Data->Disk.VolumeHandle == INVALID_HANDLE_VALUE) break;
+
+		/* Fetch a block of cluster data. */
+		BitmapParam.StartingLcn.QuadPart = Lcn;
+		ErrorCode = DeviceIoControl(Data->Disk.VolumeHandle,FSCTL_GET_VOLUME_BITMAP,
+			&BitmapParam,sizeof(BitmapParam),&BitmapData,sizeof(BitmapData),&w,NULL);
+		if (ErrorCode != 0) {
+			ErrorCode = NO_ERROR;
+		} else {
+			ErrorCode = GetLastError();
+		}
+		if ((ErrorCode != NO_ERROR) && (ErrorCode != ERROR_MORE_DATA)) break;
+
+		/* Sanity check. */
+		if (Lcn >= BitmapData.StartingLcn + BitmapData.BitmapSize) break;
+
+		/* Analyze the clusterdata. We resume where the previous block left off. */
+		Lcn = BitmapData.StartingLcn;
+		Index = 0;
+		Mask = 1;
+		IndexMax = sizeof(BitmapData.Buffer);
+		if (BitmapData.BitmapSize / 8 < IndexMax) IndexMax = (int)(BitmapData.BitmapSize / 8);
+		while ((Index < IndexMax) && (*Data->Running == RUNNING)) {
+			InUse = (BitmapData.Buffer[Index] & Mask);
+			/* If at the beginning of the disk then copy the InUse value as our
+			starting value. */
+			if (Lcn == 0) PrevInUse = InUse;
+			/* At the beginning and end of an Exclude draw the cluster. */
+			if ((Lcn == Data->MftExcludes[0].Start) || (Lcn == Data->MftExcludes[0].End) ||
+				(Lcn == Data->MftExcludes[1].Start) || (Lcn == Data->MftExcludes[1].End) ||
+				(Lcn == Data->MftExcludes[2].Start) || (Lcn == Data->MftExcludes[2].End)) {
+					if ((Lcn == Data->MftExcludes[0].End) ||
+						(Lcn == Data->MftExcludes[1].End) ||
+						(Lcn == Data->MftExcludes[2].End))
+					{
+						DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORUNMOVABLE);
+					} else if (PrevInUse == 0) {
+						DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
+					} else {
+						DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
+					}
+					InUse = 1;
+					PrevInUse = 1;
+					ClusterStart = Lcn;
+			}
+			if ((PrevInUse == 0) && (InUse != 0)) {          /* Free */
+				DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
+				ClusterStart = Lcn;
+			}
+			if ((PrevInUse != 0) && (InUse == 0)) {          /* In use */
+				DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
+				ClusterStart = Lcn;
+			}
+			PrevInUse = InUse;
+			if (Mask == 128) {
+				Mask = 1;
+				Index = Index + 1;
+			} else {
+				Mask = Mask << 1;
+			}
+			Lcn = Lcn + 1;
+		}
+
+	} while ((ErrorCode == ERROR_MORE_DATA) &&
+		(Lcn < BitmapData.StartingLcn + BitmapData.BitmapSize));
+
+	if ((Lcn > 0)/* && (*Data->RedrawScreen == 2)*/) {
+		if (PrevInUse == 0) {          /* Free */
+			DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
+		}
+		if (PrevInUse != 0) {          /* In use */
+			DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
+		}
+	}
+
+	/* Show the MFT zones. */
+	for (i = 0; i < 3; i++) {
+//		if (*Data->RedrawScreen != 2) break;
+		if (Data->MftExcludes[i].Start <= 0) continue;
+		DrawCluster(Data,Data->MftExcludes[i].Start,Data->MftExcludes[i].End,JKDefragStruct::COLORMFT);
+	}
+
+	/* Colorize all the files on the screen.
+	Note: the "$BadClus" file on NTFS disks maps the entire disk, so we have to
+	ignore it. */
+	for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item)) {
+		if (*Data->Running != RUNNING) break;
+//		if (*Data->RedrawScreen != 2) break;
+		if ((Item->LongFilename != NULL) &&
+			((_wcsicmp(Item->LongFilename,L"$BadClus") == 0) ||
+			(_wcsicmp(Item->LongFilename,L"$BadClus:$Bad:$DATA") == 0))) continue;
+		ColorizeItem(Data,Item,0,0,NO);
+	}
+
+	/* Set the flag to "no". */
+//	if (*Data->RedrawScreen == 2) *Data->RedrawScreen = 0;
 }

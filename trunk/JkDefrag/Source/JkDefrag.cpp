@@ -176,7 +176,7 @@ DWORD WINAPI DefragThread(LPVOID)
 	int i;
 
 	/* Setup the defaults. */
-	OptimizeMode = 2;
+	OptimizeMode = 10;
 	Speed = 100;
 	FreeSpace = 1;
 	Excludes = NULL;
@@ -528,7 +528,7 @@ DWORD WINAPI DefragThread(LPVOID)
 			if (*argv[i] == '\0') continue;
 
 			RunJkDefrag(argv[i],OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
-				&JKDefragGui::getInstance()->RedrawScreen,NULL);
+				/*&JKDefragGui::getInstance()->RedrawScreen,*/NULL);
 
 			DoAllVolumes = NO;
 		}
@@ -538,7 +538,7 @@ DWORD WINAPI DefragThread(LPVOID)
 	if ((DoAllVolumes == YES) && (IamRunning == RUNNING))
 	{
 		RunJkDefrag(NULL,OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
-			&JKDefragGui::getInstance()->RedrawScreen,NULL);
+			/*&JKDefragGui::getInstance()->RedrawScreen,*/NULL);
 	}
 
 	/* If the "-q" command line argument was specified then exit the program. */
@@ -664,14 +664,13 @@ int __stdcall WinMain(
 	/* Start up the defragmentation and timer threads. */
 	if (CreateThread(NULL,0,&DefragThread,NULL,0,NULL) == NULL) return(0);
 
-	m_jkGui->DoModal();
+	WPARAM wParam = m_jkGui->DoModal();
 
 	/* If the defragger is still running then ask & wait for it to stop. */
 	IamRunning = STOPPED;
 
 	StopJkDefrag(&Running,0);
 
-	WPARAM wParam = m_jkGui->Message.wParam;
 	delete jkStruct;
 	delete jkLog;
 
