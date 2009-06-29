@@ -231,39 +231,35 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath=".\Header\JKDefrag.h"
+				RelativePath=".\Source\JKDefrag.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Header\JkDefragGui.h"
+				RelativePath=".\Source\JkDefragGui.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Header\JkDefragLib.h"
+				RelativePath=".\Source\JkDefragLib.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Header\JKDefragLog.h"
+				RelativePath=".\Source\JKDefragLog.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Header\JKDefragStruct.h"
+				RelativePath=".\Source\JKDefragStruct.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Resource\resource.h"
+				RelativePath=".\Source\ScanFat.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Header\ScanFat.h"
+				RelativePath=".\Source\ScanNtfs.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Header\ScanNtfs.h"
-				>
-			</File>
-			<File
-				RelativePath=".\Header\StdAfx.h"
+				RelativePath=".\Source\StdAfx.h"
 				>
 			</File>
 		</Filter>
