@@ -21,10 +21,10 @@ http://www.kessels.com/
 #include "StdAfx.h"
 
 #include "JKDefragLog.h"
-#include "JKDefragLib.h"
-#include "JKDefrag.h"
 #include "JKDefragStruct.h"
 #include "JkDefragGui.h"
+#include "JKDefragLib.h"
+#include "JKDefrag.h"
 
 JKDefragStruct *jkStruct = NULL;
 JKDefragLog *jkLog = NULL;
@@ -176,7 +176,7 @@ DWORD WINAPI DefragThread(LPVOID)
 	int i;
 
 	/* Setup the defaults. */
-	OptimizeMode = 10;
+	OptimizeMode = 2;
 	Speed = 100;
 	FreeSpace = 1;
 	Excludes = NULL;
@@ -638,7 +638,7 @@ int __stdcall WinMain(
 					  LPSTR lpCmdLine,
 					  int nCmdShow)
 {
-	Debug = 1;
+	Debug = 5;
 
 	jkLog = new JKDefragLog();
 
