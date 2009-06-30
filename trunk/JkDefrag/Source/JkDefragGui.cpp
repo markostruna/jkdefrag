@@ -425,18 +425,25 @@ void JKDefragGui::DrawCluster(struct DefragDataStruct *Data,
 void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 {
 	struct ItemStruct *Item;
+
 	int Fragments;
+
 	ULONG64 TotalFragments;
 	ULONG64 TotalBytes;
 	ULONG64 TotalClusters;
+
 	struct ItemStruct *LargestItems[25];
+
 	int LastLargest;
+
 	struct __timeb64 Now;
+
 	int i;
 	int j;
 
 	/* Reset the progress counter. */
 	_ftime64_s(&Now);
+
 	ProgressStartTime = Now.time * 1000 + Now.millitm;
 	ProgressTime = ProgressStartTime;
 	ProgressDone = 0;

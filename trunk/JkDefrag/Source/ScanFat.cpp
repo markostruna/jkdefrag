@@ -1,334 +1,422 @@
 #include "StdAfx.h"
 
-#include "ScanFat.h"
 #include "JkDefragLib.h"
 #include "JKDefragStruct.h"
 #include "JKDefragLog.h"
 #include "JkDefragGui.h"
+#include "ScanFat.h"
 
-static JKDefragGui *m_jkGui = JKDefragGui::getInstance();
+JKScanFat *JKScanFat::m_jkScanFat = 0;
+
+JKScanFat::JKScanFat()
+{
+	m_jkGui = JKDefragGui::getInstance();
+}
+
+JKScanFat::~JKScanFat()
+{
+	delete m_jkScanFat;
+}
+
+JKScanFat *JKScanFat::getInstance()
+{
+	if (m_jkScanFat == NULL)
+	{
+		m_jkScanFat = new JKScanFat();
+	}
+
+	return m_jkScanFat;
+}
 
 /* Calculate the checksum of 8.3 filename. */
-UCHAR CalculateShortNameCheckSum(UCHAR *Name) {
+UCHAR JKScanFat::CalculateShortNameCheckSum(UCHAR *Name)
+{
 	short Index;
 	UCHAR CheckSum;
 
 	CheckSum = 0;
-	for (Index = 11; Index != 0; Index--) {
+
+	for (Index = 11; Index != 0; Index--)
+	{
 		CheckSum = ((CheckSum & 1) ? 0x80 : 0) + (CheckSum >> 1) + *Name++;
 	}
+
 	return(CheckSum);
 }
 
+/*
 
-
-
-
-/* Convert the FAT time fields into a ULONG64 time.
+Convert the FAT time fields into a ULONG64 time.
 Note: the FAT stores times in local time, not in GMT time. This subroutine converts
-that into GMT time, to be compatible with the NTFS date/times. */
-ULONG64 ConvertTime(USHORT Date, USHORT Time, USHORT Time10) {
+that into GMT time, to be compatible with the NTFS date/times.
+
+*/
+ULONG64 JKScanFat::ConvertTime(USHORT Date, USHORT Time, USHORT Time10)
+{
 	FILETIME Time1;
 	FILETIME Time2;
+
 	ULARGE_INTEGER Time3;
 
 	if (DosDateTimeToFileTime(Date,Time,&Time1) == 0) return(0);
 	if (LocalFileTimeToFileTime(&Time1,&Time2) == 0) return(0);
+
 	Time3.LowPart = Time2.dwLowDateTime;
 	Time3.HighPart = Time2.dwHighDateTime;
 	Time3.QuadPart = Time3.QuadPart + Time10 * 100000;
+
 	return(Time3.QuadPart);
 }
 
+/*
 
-
-
-/* Determine the number of clusters in an item and translate the FAT clusterlist into a
-FragmentList.
+Determine the number of clusters in an item and translate the FAT clusterlist
+into a FragmentList.
 - The first cluster number of an item is recorded in it's directory entry. The second
 and next cluster numbers are recorded in the FAT, which is simply an array of "next"
 cluster numbers.
 - A zero-length file has a first cluster number of 0.
 - The FAT contains either an EOC mark (End Of Clusterchain) or the cluster number of
 the next cluster of the file.
+
 */
-void MakeFragmentList(
-struct DefragDataStruct *Data,
-struct FatDiskInfoStruct *DiskInfo,
-struct ItemStruct *Item,
-	ULONG64 Cluster) {
-		struct FragmentListStruct *NewFragment;
-		struct FragmentListStruct *LastFragment;
-		ULONG64 FirstCluster;
-		ULONG64 LastCluster;
-		ULONG64 Vcn;
-		int MaxIterate;
+void JKScanFat::MakeFragmentList(struct DefragDataStruct *Data, struct FatDiskInfoStruct *DiskInfo, struct ItemStruct *Item, ULONG64 Cluster)
+{
+	struct FragmentListStruct *NewFragment;
+	struct FragmentListStruct *LastFragment;
 
-		Item->Clusters = 0;
-		Item->Fragments = NULL;
+	ULONG64 FirstCluster;
+	ULONG64 LastCluster;
+	ULONG64 Vcn;
 
-		/* If cluster is zero then return zero. */
-		if (Cluster == 0) return;
+	int MaxIterate;
 
-		/* Loop through the FAT cluster list, counting the clusters and creating items in the
-		fragment list. */
-		FirstCluster = Cluster;
-		LastCluster = 0;
-		Vcn = 0;
-		for (MaxIterate = 0; MaxIterate < DiskInfo->CountofClusters + 1; MaxIterate++) {
+	Item->Clusters = 0;
+	Item->Fragments = NULL;
 
-			/* Exit the loop when we have reached the end of the cluster list. */
-			if ((Data->Disk.Type == FAT12) && (Cluster >= 0xFF8)) break;
-			if ((Data->Disk.Type == FAT16) && (Cluster >= 0xFFF8)) break;
-			if ((Data->Disk.Type == FAT32) && (Cluster >= 0xFFFFFF8)) break;
+	/* If cluster is zero then return zero. */
+	if (Cluster == 0) return;
 
-			/* Sanity check, test if the cluster is within the range of valid cluster numbers. */
-			if (Cluster < 2) break;
-			if (Cluster > DiskInfo->CountofClusters + 1) break;
+	/* Loop through the FAT cluster list, counting the clusters and creating items in the fragment list. */
+	FirstCluster = Cluster;
+	LastCluster = 0;
+	Vcn = 0;
 
-			/* Increment the cluster counter. */
-			Item->Clusters = Item->Clusters + 1;
+	for (MaxIterate = 0; MaxIterate < DiskInfo->CountofClusters + 1; MaxIterate++)
+	{
+		/* Exit the loop when we have reached the end of the cluster list. */
+		if ((Data->Disk.Type == FAT12) && (Cluster >= 0xFF8)) break;
+		if ((Data->Disk.Type == FAT16) && (Cluster >= 0xFFF8)) break;
+		if ((Data->Disk.Type == FAT32) && (Cluster >= 0xFFFFFF8)) break;
 
-			/* If this is a new fragment then create a record for the previous fragment. If not then
+		/* Sanity check, test if the cluster is within the range of valid cluster numbers. */
+		if (Cluster < 2) break;
+		if (Cluster > DiskInfo->CountofClusters + 1) break;
+
+		/* Increment the cluster counter. */
+		Item->Clusters = Item->Clusters + 1;
+
+		/* If this is a new fragment then create a record for the previous fragment. If not then
 			add the cluster to the counters and continue. */
-			if ((Cluster != LastCluster + 1) && (LastCluster != 0)) {
-				NewFragment = (struct FragmentListStruct *)malloc(sizeof(struct FragmentListStruct));
-				if (NewFragment == NULL) {
-					m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
-					return;
-				}
-				NewFragment->Lcn = FirstCluster - 2;
-				Vcn = Vcn + LastCluster - FirstCluster + 1;
-				NewFragment->NextVcn = Vcn;
-				NewFragment->Next = NULL;
-				if (Item->Fragments == NULL) {
-					Item->Fragments = NewFragment;
-				} else {
-					if (LastFragment != NULL) LastFragment->Next = NewFragment;
-				}
-				LastFragment = NewFragment;
-				FirstCluster = Cluster;
-			}
-			LastCluster = Cluster;
-
-			/* Get next cluster from FAT. */
-			switch (Data->Disk.Type) {
-	  case FAT12:
-		  if ((Cluster & 1) == 1) {
-			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) >> 4;
-		  } else {
-			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) & 0xFFF;
-		  }
-		  break;
-	  case FAT16: Cluster = DiskInfo->FatData.FAT16[Cluster]; break;
-	  case FAT32: Cluster = DiskInfo->FatData.FAT32[Cluster] & 0xFFFFFFF; break;
-			}
-		}
-
-		/* If too many iterations (infinite loop in FAT) then exit. */
-		if (MaxIterate >= DiskInfo->CountofClusters + 1) {
-			m_jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
-			return;
-		}
-
-		/* Create the last fragment. */
-		if (LastCluster != 0) {
+		if ((Cluster != LastCluster + 1) && (LastCluster != 0))
+		{
 			NewFragment = (struct FragmentListStruct *)malloc(sizeof(struct FragmentListStruct));
-			if (NewFragment == NULL) {
+
+			if (NewFragment == NULL)
+			{
 				m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 				return;
 			}
+
 			NewFragment->Lcn = FirstCluster - 2;
 			Vcn = Vcn + LastCluster - FirstCluster + 1;
 			NewFragment->NextVcn = Vcn;
 			NewFragment->Next = NULL;
-			if (Item->Fragments == NULL) {
+
+			if (Item->Fragments == NULL)
+			{
 				Item->Fragments = NewFragment;
-			} else {
+			}
+			else
+			{
 				if (LastFragment != NULL) LastFragment->Next = NewFragment;
 			}
+
+			LastFragment = NewFragment;
+			FirstCluster = Cluster;
 		}
+
+		LastCluster = Cluster;
+
+		/* Get next cluster from FAT. */
+		switch (Data->Disk.Type)
+		{
+		case FAT12:
+		  if ((Cluster & 1) == 1)
+		  {
+			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) >> 4;
+		  }
+		  else
+		  {
+			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) & 0xFFF;
+		  }
+
+		  break;
+
+		case FAT16: Cluster = DiskInfo->FatData.FAT16[Cluster]; break;
+		case FAT32: Cluster = DiskInfo->FatData.FAT32[Cluster] & 0xFFFFFFF; break;
+		}
+	}
+
+	/* If too many iterations (infinite loop in FAT) then exit. */
+	if (MaxIterate >= DiskInfo->CountofClusters + 1)
+	{
+		m_jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
+
+		return;
+	}
+
+	/* Create the last fragment. */
+	if (LastCluster != 0)
+	{
+		NewFragment = (struct FragmentListStruct *)malloc(sizeof(struct FragmentListStruct));
+
+		if (NewFragment == NULL)
+		{
+			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+
+			return;
+		}
+
+		NewFragment->Lcn = FirstCluster - 2;
+		Vcn = Vcn + LastCluster - FirstCluster + 1;
+		NewFragment->NextVcn = Vcn;
+		NewFragment->Next = NULL;
+
+		if (Item->Fragments == NULL)
+		{
+			Item->Fragments = NewFragment;
+		}
+		else
+		{
+			if (LastFragment != NULL) LastFragment->Next = NewFragment;
+		}
+	}
 }
-
-
-
 
 /* Load a directory from disk into a new memory buffer. Return NULL if error.
 Note: the caller is responsible for free'ing the buffer. */
-BYTE *LoadDirectory(
-struct DefragDataStruct *Data,
-struct FatDiskInfoStruct *DiskInfo,
-	ULONG64 StartCluster,
-	ULONG64 *OutLength) {
-		BYTE *Buffer;
-		ULONG64 BufferLength;
-		ULONG64 BufferOffset;
-		ULONG64 Cluster;
-		ULONG64 FirstCluster;
-		ULONG64 LastCluster;
-		ULONG64 FragmentLength;
-		OVERLAPPED gOverlapped;
-		ULARGE_INTEGER Trans;
-		DWORD BytesRead;
-		int Result;
-		int MaxIterate;
-		WCHAR s1[BUFSIZ];
+BYTE *JKScanFat::LoadDirectory(struct DefragDataStruct *Data, struct FatDiskInfoStruct *DiskInfo, ULONG64 StartCluster, ULONG64 *OutLength)
+{
+	BYTE *Buffer;
 
-		/* Reset the OutLength to zero, in case we exit for an error. */
-		if (OutLength != NULL) *OutLength = 0;
+	ULONG64 BufferLength;
+	ULONG64 BufferOffset;
+	ULONG64 Cluster;
+	ULONG64 FirstCluster;
+	ULONG64 LastCluster;
+	ULONG64 FragmentLength;
 
-		/* If cluster is zero then return NULL. */
-		if (StartCluster == 0) return(NULL);
+	OVERLAPPED gOverlapped;
 
-		/* Count the size of the directory. */
-		BufferLength = 0;
-		Cluster = StartCluster;
-		for (MaxIterate = 0; MaxIterate < DiskInfo->CountofClusters + 1; MaxIterate++) {
+	ULARGE_INTEGER Trans;
 
-			/* Exit the loop when we have reached the end of the cluster list. */
-			if ((Data->Disk.Type == FAT12) && (Cluster >= 0xFF8)) break;
-			if ((Data->Disk.Type == FAT16) && (Cluster >= 0xFFF8)) break;
-			if ((Data->Disk.Type == FAT32) && (Cluster >= 0xFFFFFF8)) break;
+	DWORD BytesRead;
 
-			/* Sanity check, test if the cluster is within the range of valid cluster numbers. */
-			if (Cluster < 2) return(NULL);
-			if (Cluster > DiskInfo->CountofClusters + 1) return(NULL);
+	int Result;
+	int MaxIterate;
 
-			/* Increment the BufferLength counter. */
-			BufferLength = BufferLength + DiskInfo->SectorsPerCluster * DiskInfo->BytesPerSector;
+	WCHAR s1[BUFSIZ];
 
-			/* Get next cluster from FAT. */
-			switch (Data->Disk.Type) {
-	  case FAT12:
-		  if ((Cluster & 1) == 1) {
+	/* Reset the OutLength to zero, in case we exit for an error. */
+	if (OutLength != NULL) *OutLength = 0;
+
+	/* If cluster is zero then return NULL. */
+	if (StartCluster == 0) return(NULL);
+
+	/* Count the size of the directory. */
+	BufferLength = 0;
+	Cluster = StartCluster;
+
+	for (MaxIterate = 0; MaxIterate < DiskInfo->CountofClusters + 1; MaxIterate++)
+	{
+		/* Exit the loop when we have reached the end of the cluster list. */
+		if ((Data->Disk.Type == FAT12) && (Cluster >= 0xFF8)) break;
+		if ((Data->Disk.Type == FAT16) && (Cluster >= 0xFFF8)) break;
+		if ((Data->Disk.Type == FAT32) && (Cluster >= 0xFFFFFF8)) break;
+
+		/* Sanity check, test if the cluster is within the range of valid cluster numbers. */
+		if (Cluster < 2) return(NULL);
+		if (Cluster > DiskInfo->CountofClusters + 1) return(NULL);
+
+		/* Increment the BufferLength counter. */
+		BufferLength = BufferLength + DiskInfo->SectorsPerCluster * DiskInfo->BytesPerSector;
+
+		/* Get next cluster from FAT. */
+		switch (Data->Disk.Type)
+		{
+		case FAT12:
+		  if ((Cluster & 1) == 1)
+		  {
 			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) >> 4;
-		  } else {
+		  }
+		  else
+		  {
 			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) & 0xFFF;
 		  }
 		  break;
-	  case FAT16: Cluster = DiskInfo->FatData.FAT16[Cluster]; break;
-	  case FAT32: Cluster = DiskInfo->FatData.FAT32[Cluster] & 0xFFFFFFF; break;
-			}
+
+		case FAT16: Cluster = DiskInfo->FatData.FAT16[Cluster]; break;
+		case FAT32: Cluster = DiskInfo->FatData.FAT32[Cluster] & 0xFFFFFFF; break;
 		}
+	}
 
-		/* If too many iterations (infinite loop in FAT) then return NULL. */
-		if (MaxIterate >= DiskInfo->CountofClusters + 1) {
-			m_jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
-			return(NULL);
-		}
+	/* If too many iterations (infinite loop in FAT) then return NULL. */
+	if (MaxIterate >= DiskInfo->CountofClusters + 1)
+	{
+		m_jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
 
-		/* Allocate buffer. */
-		if (BufferLength > UINT_MAX) {
-			m_jkGui->ShowDebug(2,NULL,L"Directory is too big, %I64u bytes",BufferLength);
-			return(NULL);
-		}
-		Buffer = (BYTE *)malloc((size_t)BufferLength);
-		if (Buffer == NULL) {
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
-			return(NULL);
-		}
+		return(NULL);
+	}
 
-		/* Loop through the FAT cluster list and load all fragments from disk into the buffer. */
-		BufferOffset = 0;
-		Cluster = StartCluster;
-		FirstCluster = Cluster;
-		LastCluster = 0;
-		for (MaxIterate = 0; MaxIterate < DiskInfo->CountofClusters + 1; MaxIterate++) {
+	/* Allocate buffer. */
+	if (BufferLength > UINT_MAX)
+	{
+		m_jkGui->ShowDebug(2,NULL,L"Directory is too big, %I64u bytes",BufferLength);
 
-			/* Exit the loop when we have reached the end of the cluster list. */
-			if ((Data->Disk.Type == FAT12) && (Cluster >= 0xFF8)) break;
-			if ((Data->Disk.Type == FAT16) && (Cluster >= 0xFFF8)) break;
-			if ((Data->Disk.Type == FAT32) && (Cluster >= 0xFFFFFF8)) break;
+		return(NULL);
+	}
 
-			/* Sanity check, test if the cluster is within the range of valid cluster numbers. */
-			if (Cluster < 2) break;
-			if (Cluster > DiskInfo->CountofClusters + 1) break;
+	Buffer = (BYTE *)malloc((size_t)BufferLength);
 
-			/* If this is a new fragment then load the previous fragment from disk. If not then
-			add to the counters and continue. */
-			if ((Cluster != LastCluster + 1) && (LastCluster != 0)) {
-				FragmentLength = (LastCluster - FirstCluster + 1) * DiskInfo->SectorsPerCluster * DiskInfo->BytesPerSector;
-				Trans.QuadPart = (DiskInfo->FirstDataSector + (FirstCluster - 2) * DiskInfo->SectorsPerCluster) *
-					DiskInfo->BytesPerSector;
-				gOverlapped.Offset     = Trans.LowPart;
-				gOverlapped.OffsetHigh = Trans.HighPart;
-				gOverlapped.hEvent     = NULL;
-				m_jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.",
-					FragmentLength,Trans.QuadPart);
-				Result = ReadFile(Data->Disk.VolumeHandle,&Buffer[BufferOffset],(DWORD)FragmentLength,
-					&BytesRead,&gOverlapped);
-				if (Result == 0) {
-					SystemErrorStr(GetLastError(),s1,BUFSIZ);
-					m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
-					free(Buffer);
-					return(NULL);
-				}
-				//ShowHex(Data,Buffer,256);
-				BufferOffset = BufferOffset + FragmentLength;
-				FirstCluster = Cluster;
-			}
-			LastCluster = Cluster;
+	if (Buffer == NULL)
+	{
+		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 
-			/* Get next cluster from FAT. */
-			switch (Data->Disk.Type) {
-	  case FAT12:
-		  if ((Cluster & 1) == 1) {
-			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) >> 4;
-		  } else {
-			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) & 0xFFF;
-		  }
-		  break;
-	  case FAT16: Cluster = DiskInfo->FatData.FAT16[Cluster]; break;
-	  case FAT32: Cluster = DiskInfo->FatData.FAT32[Cluster] & 0xFFFFFFF; break;
-			}
-		}
+		return(NULL);
+	}
 
-		/* Load the last fragment. */
-		if (LastCluster != 0) {
+	/* Loop through the FAT cluster list and load all fragments from disk into the buffer. */
+	BufferOffset = 0;
+	Cluster = StartCluster;
+	FirstCluster = Cluster;
+	LastCluster = 0;
+
+	for (MaxIterate = 0; MaxIterate < DiskInfo->CountofClusters + 1; MaxIterate++)
+	{
+		/* Exit the loop when we have reached the end of the cluster list. */
+		if ((Data->Disk.Type == FAT12) && (Cluster >= 0xFF8)) break;
+		if ((Data->Disk.Type == FAT16) && (Cluster >= 0xFFF8)) break;
+		if ((Data->Disk.Type == FAT32) && (Cluster >= 0xFFFFFF8)) break;
+
+		/* Sanity check, test if the cluster is within the range of valid cluster numbers. */
+		if (Cluster < 2) break;
+		if (Cluster > DiskInfo->CountofClusters + 1) break;
+
+		/* If this is a new fragment then load the previous fragment from disk. If not then
+		add to the counters and continue. */
+		if ((Cluster != LastCluster + 1) && (LastCluster != 0))
+		{
 			FragmentLength = (LastCluster - FirstCluster + 1) * DiskInfo->SectorsPerCluster * DiskInfo->BytesPerSector;
-			Trans.QuadPart = (DiskInfo->FirstDataSector + (FirstCluster - 2) * DiskInfo->SectorsPerCluster) *
-				DiskInfo->BytesPerSector;
+			Trans.QuadPart = (DiskInfo->FirstDataSector + (FirstCluster - 2) * DiskInfo->SectorsPerCluster) * DiskInfo->BytesPerSector;
+
 			gOverlapped.Offset     = Trans.LowPart;
 			gOverlapped.OffsetHigh = Trans.HighPart;
 			gOverlapped.hEvent     = NULL;
-			m_jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.",
-				FragmentLength,Trans.QuadPart);
-			Result = ReadFile(Data->Disk.VolumeHandle,&Buffer[BufferOffset],(DWORD)FragmentLength,
-				&BytesRead,&gOverlapped);
-			if (Result == 0) {
+
+			m_jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.", FragmentLength,Trans.QuadPart);
+
+			Result = ReadFile(Data->Disk.VolumeHandle,&Buffer[BufferOffset],(DWORD)FragmentLength,&BytesRead,&gOverlapped);
+
+			if (Result == 0)
+			{
 				SystemErrorStr(GetLastError(),s1,BUFSIZ);
+
 				m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+
 				free(Buffer);
+
 				return(NULL);
 			}
+
+			//ShowHex(Data,Buffer,256);
+			BufferOffset = BufferOffset + FragmentLength;
+			FirstCluster = Cluster;
 		}
 
-		if (OutLength != NULL) *OutLength = BufferLength;
-		return(Buffer);
+		LastCluster = Cluster;
+
+		/* Get next cluster from FAT. */
+		switch (Data->Disk.Type)
+		{
+		case FAT12:
+		  if ((Cluster & 1) == 1)
+		  {
+			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) >> 4;
+		  } else {
+			  Cluster = *((WORD *)&DiskInfo->FatData.FAT12[Cluster + Cluster / 2]) & 0xFFF;
+		  }
+
+		  break;
+		case FAT16: Cluster = DiskInfo->FatData.FAT16[Cluster]; break;
+		case FAT32: Cluster = DiskInfo->FatData.FAT32[Cluster] & 0xFFFFFFF; break;
+		}
+	}
+
+	/* Load the last fragment. */
+	if (LastCluster != 0)
+	{
+		FragmentLength = (LastCluster - FirstCluster + 1) * DiskInfo->SectorsPerCluster * DiskInfo->BytesPerSector;
+		Trans.QuadPart = (DiskInfo->FirstDataSector + (FirstCluster - 2) * DiskInfo->SectorsPerCluster) * DiskInfo->BytesPerSector;
+
+		gOverlapped.Offset     = Trans.LowPart;
+		gOverlapped.OffsetHigh = Trans.HighPart;
+		gOverlapped.hEvent     = NULL;
+
+		m_jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.", FragmentLength,Trans.QuadPart);
+
+		Result = ReadFile(Data->Disk.VolumeHandle,&Buffer[BufferOffset],(DWORD)FragmentLength, &BytesRead,&gOverlapped);
+
+		if (Result == 0)
+		{
+			SystemErrorStr(GetLastError(),s1,BUFSIZ);
+
+			m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+
+			free(Buffer);
+
+			return(NULL);
+		}
+	}
+
+	if (OutLength != NULL) *OutLength = BufferLength;
+
+	return(Buffer);
 }
 
-
-
-
 /* Analyze a directory and add all the items to the item tree. */
-void AnalyzeFatDirectory(
-struct DefragDataStruct *Data,
-struct FatDiskInfoStruct *DiskInfo,
-	BYTE *Buffer,
-	ULONG64 Length,
-struct ItemStruct *ParentDirectory) {
+void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDiskInfoStruct *DiskInfo, BYTE *Buffer, ULONG64 Length, struct ItemStruct *ParentDirectory)
+{
 	struct FatDirStruct *Dir;
 	struct FatLongNameDirStruct *LDir;
 	struct ItemStruct *Item;
+
 	DWORD Index;
+
 	WCHAR ShortName[13];
 	WCHAR LongName[820];
+
 	int LastLongNameSection;
+
 	UCHAR LongNameChecksum;
+
 	BYTE *SubDirBuf;
+
 	ULONG64 SubDirLength;
 	ULONG64 StartCluster;
+
 	WCHAR *p1;
+
 	int i;
 
 	/* Sanity check. */
@@ -343,45 +431,66 @@ struct ItemStruct *ParentDirectory) {
 	/* Walk through all the directory entries, extract the info, and store in memory
 	in the ItemTree. */
 	LastLongNameSection = 0;
-	for (Index = 0; Index + 31 < Length; Index = Index + 32) {
+
+	for (Index = 0; Index + 31 < Length; Index = Index + 32)
+	{
 		if (*Data->Running != RUNNING) break;
 
 		Dir = (struct FatDirStruct *)&Buffer[Index];
 
 		/* Ignore free (not used) entries. */
-		if (Dir->DIR_Name[0] == 0xE5) {
+		if (Dir->DIR_Name[0] == 0xE5)
+		{
 			m_jkGui->ShowDebug(6,NULL,L"%u.\tFree (not used)",Index/32);
+
 			continue;
 		}
 
 		/* Exit at the end of the directory. */
-		if (Dir->DIR_Name[0] == 0) {
+		if (Dir->DIR_Name[0] == 0)
+		{
 			m_jkGui->ShowDebug(6,NULL,L"%u.\tFree (not used), end of directory.",Index/32);
+
 			break;
 		}
 
 		/* If this is a long filename component then save the string and loop. */
-		if ((Dir->DIR_Attr & ATTR_LONG_NAME_MASK) == ATTR_LONG_NAME) {
+		if ((Dir->DIR_Attr & ATTR_LONG_NAME_MASK) == ATTR_LONG_NAME)
+		{
 			LDir = (struct FatLongNameDirStruct *)&Buffer[Index];
+
 			m_jkGui->ShowDebug(6,NULL,L"%u.\tLong filename part.",Index/32);
+
 			i = (LDir->LDIR_Ord & 0x3F);
-			if (i == 0) {
+
+			if (i == 0)
+			{
 				LastLongNameSection = 0;
+
 				continue;
 			}
-			if ((LDir->LDIR_Ord & 0x40) == 0x40) {
+
+			if ((LDir->LDIR_Ord & 0x40) == 0x40)
+			{
 				wmemset(LongName,L'\0',820);
+
 				LastLongNameSection = i;
 				LongNameChecksum = LDir->LDIR_Chksum;
-			} else {
-				if ((i + 1 != LastLongNameSection) ||
-					(LongNameChecksum != LDir->LDIR_Chksum)) {
-						LastLongNameSection = 0;
-						continue;
+			}
+			else
+			{
+				if ((i + 1 != LastLongNameSection) || (LongNameChecksum != LDir->LDIR_Chksum))
+				{
+					LastLongNameSection = 0;
+				
+					continue;
 				}
+
 				LastLongNameSection = i;
 			}
+
 			i = (i - 1) * 13;
+
 			LongName[i++] = LDir->LDIR_Name1[0];
 			LongName[i++] = LDir->LDIR_Name1[1];
 			LongName[i++] = LDir->LDIR_Name1[2];
@@ -395,103 +504,156 @@ struct ItemStruct *ParentDirectory) {
 			LongName[i++] = LDir->LDIR_Name2[5];
 			LongName[i++] = LDir->LDIR_Name3[0];
 			LongName[i++] = LDir->LDIR_Name3[1];
+
 			continue;
 		}
 
 		/* If we are here and the long filename counter is not 1 then something is wrong
 		with the long filename. Ignore the long filename. */
-		if (LastLongNameSection != 1) {
+		if (LastLongNameSection != 1)
+		{
 			LongName[0] = '\0';
-		} else if (CalculateShortNameCheckSum(Dir->DIR_Name) != LongNameChecksum) {
+		}
+		else
+		if (CalculateShortNameCheckSum(Dir->DIR_Name) != LongNameChecksum)
+		{
 			m_jkGui->ShowDebug(0,NULL,L"%u.\tError: long filename is out of sync");
 			LongName[0] = '\0';
 		}
+
 		LastLongNameSection = 0;
 
 		/* Extract the short name. */
 		for (i = 0; i < 8; i++) ShortName[i] = Dir->DIR_Name[i];
+
 		for (i = 7; i > 0; i--) if (ShortName[i] != ' ') break;
+
 		if (ShortName[i] != ' ') i++;
+
 		ShortName[i] = '.';
 		ShortName[i+1] = Dir->DIR_Name[8];
 		ShortName[i+2] = Dir->DIR_Name[9];
 		ShortName[i+3] = Dir->DIR_Name[10];
-		if (ShortName[i+3] != ' ') {
+
+		if (ShortName[i+3] != ' ')
+		{
 			ShortName[i+4] = '\0';
-		} else if (ShortName[i+2] != ' ') {
+		}
+		else
+		if (ShortName[i+2] != ' ')
+		{
 			ShortName[i+3] = '\0';
-		} else if (ShortName[i+1] != ' ') {
+		}
+		else
+		if (ShortName[i+1] != ' ')
+		{
 			ShortName[i+2] = '\0';
-		} else {
+		}
+		else
+		{
 			ShortName[i] = '\0';
 		}
 		if (ShortName[0] == 0x05) ShortName[0] = 0xE5;
 
 		/* If this is a VolumeID then loop. We have no use for it. */
-		if ((Dir->DIR_Attr & (ATTR_DIRECTORY | ATTR_VOLUME_ID)) == ATTR_VOLUME_ID) {
+		if ((Dir->DIR_Attr & (ATTR_DIRECTORY | ATTR_VOLUME_ID)) == ATTR_VOLUME_ID)
+		{
 			p1 = wcschr(ShortName,L'.');
+
 			if (p1 != NULL) wcscpy_s(p1,wcslen(p1),p1+1);
+
 			m_jkGui->ShowDebug(6,NULL,L"%u.\t'%s' (volume ID)",Index/32,ShortName);
+			
 			continue;
 		}
 
-		if ((Dir->DIR_Attr & (ATTR_DIRECTORY | ATTR_VOLUME_ID)) == (ATTR_DIRECTORY | ATTR_VOLUME_ID)) {
+		if ((Dir->DIR_Attr & (ATTR_DIRECTORY | ATTR_VOLUME_ID)) == (ATTR_DIRECTORY | ATTR_VOLUME_ID))
+		{
 			m_jkGui->ShowDebug(6,NULL,L"%u.\tInvalid directory entry");
+		
 			continue;
 		}
 
 		/* Ignore "." and "..". */
-		if (wcscmp(ShortName,L".") == 0) {
+		if (wcscmp(ShortName,L".") == 0)
+		{
 			m_jkGui->ShowDebug(6,NULL,L"%u.\t'.'",Index/32);
+
 			continue;
 		}
-		if (wcscmp(ShortName,L"..") == 0) {
+
+		if (wcscmp(ShortName,L"..") == 0)
+		{
 			m_jkGui->ShowDebug(6,NULL,L"%u.\t'..'",Index/32);
+
 			continue;
 		}
 
 		/* Create and fill a new item record in memory. */
 		Item = (struct ItemStruct *)malloc(sizeof(struct ItemStruct));
-		if (Item == NULL) {
+
+		if (Item == NULL)
+		{
 			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 			break;
 		}
-		if (wcscmp(ShortName,L".") == 0) {
+
+		if (wcscmp(ShortName,L".") == 0)
+		{
 			Item->ShortFilename = NULL;
-		} else {
+		}
+		else
+		{
 			Item->ShortFilename = _wcsdup(ShortName);
 			m_jkGui->ShowDebug(6,NULL,L"%u.\t'%s'",Index/32,ShortName);
 		}
-		if (LongName[0] == '\0') {
+
+		if (LongName[0] == '\0')
+		{
 			Item->LongFilename = NULL;
-		} else {
+		}
+		else
+		{
 			Item->LongFilename = _wcsdup(LongName);
 			m_jkGui->ShowDebug(6,NULL,L"\tLong filename = '%s'",LongName);
 		}
+
 		if ((Item->LongFilename != NULL) &&
 			(Item->ShortFilename != NULL) &&
-			(_wcsicmp(Item->LongFilename,Item->ShortFilename) == 0)) {
-				free(Item->ShortFilename);
-				Item->ShortFilename = Item->LongFilename;
+			(_wcsicmp(Item->LongFilename,Item->ShortFilename) == 0))
+		{
+			free(Item->ShortFilename);
+
+			Item->ShortFilename = Item->LongFilename;
 		}
+
 		if ((Item->LongFilename == NULL) && (Item->ShortFilename != NULL)) Item->LongFilename = Item->ShortFilename;
 		if ((Item->LongFilename != NULL) && (Item->ShortFilename == NULL)) Item->ShortFilename = Item->LongFilename;
+
 		Item->ShortPath = NULL;
 		Item->LongPath = NULL;
 		Item->Bytes = Dir->DIR_FileSize;
-		if (Data->Disk.Type == FAT32) {
+
+		if (Data->Disk.Type == FAT32)
+		{
 			StartCluster = MAKELONG(Dir->DIR_FstClusLO,Dir->DIR_FstClusHI);
-		} else {
+		}
+		else
+		{
 			StartCluster = Dir->DIR_FstClusLO;
 		}
+
 		MakeFragmentList(Data,DiskInfo,Item,StartCluster);
+
 		Item->CreationTime = ConvertTime(Dir->DIR_CrtDate,Dir->DIR_CrtTime,Dir->DIR_CrtTimeTenth);
 		Item->MftChangeTime = ConvertTime(Dir->DIR_WrtDate,Dir->DIR_WrtTime,0);
 		Item->LastAccessTime = ConvertTime(Dir->DIR_LstAccDate,0,0);
 		Item->ParentInode = 0;
 		Item->ParentDirectory = ParentDirectory;
 		Item->Directory = NO;
+
 		if ((Dir->DIR_Attr & (ATTR_DIRECTORY | ATTR_VOLUME_ID)) == ATTR_DIRECTORY) Item->Directory = YES;
+
 		Item->Unmovable = NO;
 		Item->Exclude = NO;
 		Item->SpaceHog = NO;
@@ -510,31 +672,35 @@ struct ItemStruct *ParentDirectory) {
 //		}
 
 		/* Increment counters. */
-		if (Item->Directory == YES) {
+		if (Item->Directory == YES)
+		{
 			Data->CountDirectories = Data->CountDirectories + 1;
 		}
+
 		Data->CountAllFiles = Data->CountAllFiles + 1;
 		Data->CountAllBytes = Data->CountAllBytes + Item->Bytes;
 		Data->CountAllClusters = Data->CountAllClusters + Item->Clusters;
-		if (FragmentCount(Item) > 1) {
+
+		if (FragmentCount(Item) > 1)
+		{
 			Data->CountFragmentedItems = Data->CountFragmentedItems + 1;
 			Data->CountFragmentedBytes = Data->CountFragmentedBytes + Item->Bytes;
 			Data->CountFragmentedClusters = Data->CountFragmentedClusters + Item->Clusters;
 		}
 
 		/* If this is a directory then iterate. */
-		if (Item->Directory == YES) {
+		if (Item->Directory == YES)
+		{
 			SubDirBuf = LoadDirectory(Data,DiskInfo,StartCluster,&SubDirLength);
+
 			AnalyzeFatDirectory(Data,DiskInfo,SubDirBuf,SubDirLength,Item);
+
 			free(SubDirBuf);
+
 			m_jkGui->ShowDebug(6,NULL,L"Finished with subdirectory.");
 		}
 	}
 }
-
-
-
-
 
 /* Analyze a FAT disk and load into the ItemTree in memory. Return FALSE if the disk is
 not a FAT disk, or could not be analyzed.
@@ -570,77 +736,118 @@ case FAT16: if (FATContent == 0xFFF7) IsBadCluster = TRUE; break;
 case FAT32: if (FATContent == 0x0FFFFFF7) IsBadCluster = TRUE; break;
 }
 */
-BOOL AnalyzeFatVolume(struct DefragDataStruct *Data) {
+BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
+{
 	struct FatBootSectorStruct BootSector;
 	struct FatDiskInfoStruct DiskInfo;
+
 	ULARGE_INTEGER Trans;
+
 	OVERLAPPED gOverlapped;
+
 	DWORD BytesRead;
+
 	size_t FatSize;
+
 	BYTE *RootDirectory;
+
 	ULONG64 RootStart;
 	ULONG64 RootLength;
+
 	int Result;
+
 	WCHAR s1[BUFSIZ];
+
 	char s2[BUFSIZ];
 
 	/* Read the boot block from the disk. */
 	gOverlapped.Offset     = 0;
 	gOverlapped.OffsetHigh = 0;
 	gOverlapped.hEvent     = NULL;
+
 	Result = ReadFile(Data->Disk.VolumeHandle,&BootSector,sizeof(struct FatBootSectorStruct),&BytesRead,&gOverlapped);
-	if ((Result == 0) || (BytesRead != 512)) {
+
+	if ((Result == 0) || (BytesRead != 512))
+	{
 		SystemErrorStr(GetLastError(),s1,BUFSIZ);
+
 		m_jkGui->ShowDebug(2,NULL,L"Error while reading bootblock: %s",s1);
+
 		return(FALSE);
 	}
 
 	/* Test if the boot block is a FAT boot block. */
 	if ((BootSector.Signature != 0xAA55) ||
 		(((BootSector.BS_jmpBoot[0] != 0xEB) || (BootSector.BS_jmpBoot[2] != 0x90)) &&
-		(BootSector.BS_jmpBoot[0] != 0xE9))) {
-			m_jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (different cookie).");
-			return(FALSE);
+		(BootSector.BS_jmpBoot[0] != 0xE9)))
+	{
+		m_jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (different cookie).");
+	
+		return(FALSE);
 	}
 
-	/* Fetch values from the bootblock and determine what FAT this is, FAT12, FAT16, or
-	FAT32. */
+	/* Fetch values from the bootblock and determine what FAT this is, FAT12, FAT16, or FAT32. */
 	DiskInfo.BytesPerSector     = BootSector.BPB_BytsPerSec;
-	if (DiskInfo.BytesPerSector == 0) {
+
+	if (DiskInfo.BytesPerSector == 0)
+	{
 		m_jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (BytesPerSector is zero).");
+
 		return(FALSE);
 	}
+
 	DiskInfo.SectorsPerCluster  = BootSector.BPB_SecPerClus;
-	if (DiskInfo.SectorsPerCluster == 0) {
+
+	if (DiskInfo.SectorsPerCluster == 0)
+	{
 		m_jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (SectorsPerCluster is zero).");
+
 		return(FALSE);
 	}
-	DiskInfo.TotalSectors       = BootSector.BPB_TotSec16;
+
+	DiskInfo.TotalSectors = BootSector.BPB_TotSec16;
+
 	if (DiskInfo.TotalSectors == 0) DiskInfo.TotalSectors = BootSector.BPB_TotSec32;
+
 	DiskInfo.RootDirSectors = ((BootSector.BPB_RootEntCnt * 32) + (BootSector.BPB_BytsPerSec - 1)) / BootSector.BPB_BytsPerSec;
+
 	DiskInfo.FATSz = BootSector.BPB_FATSz16;
+
 	if (DiskInfo.FATSz == 0) DiskInfo.FATSz = BootSector.Fat32.BPB_FATSz32;
-	DiskInfo.FirstDataSector = BootSector.BPB_RsvdSecCnt + (BootSector.BPB_NumFATs * DiskInfo.FATSz) +
-		DiskInfo.RootDirSectors;
-	DiskInfo.DataSec = DiskInfo.TotalSectors - (BootSector.BPB_RsvdSecCnt +
-		(BootSector.BPB_NumFATs * DiskInfo.FATSz) + DiskInfo.RootDirSectors);
+
+	DiskInfo.FirstDataSector = BootSector.BPB_RsvdSecCnt + (BootSector.BPB_NumFATs * DiskInfo.FATSz) + DiskInfo.RootDirSectors;
+
+	DiskInfo.DataSec = DiskInfo.TotalSectors - (BootSector.BPB_RsvdSecCnt +	(BootSector.BPB_NumFATs * DiskInfo.FATSz) + DiskInfo.RootDirSectors);
+
 	DiskInfo.CountofClusters = DiskInfo.DataSec / BootSector.BPB_SecPerClus;
-	if (DiskInfo.CountofClusters < 4085) {
+
+	if (DiskInfo.CountofClusters < 4085)
+	{
 		Data->Disk.Type = FAT12;
 		m_jkGui->ShowDebug(0,NULL,L"This is a FAT12 disk.");
-	} else if(DiskInfo.CountofClusters < 65525) {
+	}
+	else
+	if (DiskInfo.CountofClusters < 65525)
+	{
 		Data->Disk.Type = FAT16;
+		
 		m_jkGui->ShowDebug(0,NULL,L"This is a FAT16 disk.");
-	} else {
+	}
+	else
+	{
 		Data->Disk.Type = FAT32;
+
 		m_jkGui->ShowDebug(0,NULL,L"This is a FAT32 disk.");
 	}
+
 	Data->BytesPerCluster = DiskInfo.BytesPerSector * DiskInfo.SectorsPerCluster;
 	Data->TotalClusters = DiskInfo.CountofClusters;
 
 	/* Output debug information. */
 	strncpy_s(s2,BUFSIZ,(char *)&BootSector.BS_OEMName[0],8);
+
 	s2[8] = '\0';
+
 	m_jkGui->ShowDebug(2,NULL,L"  OEMName: %S",s2);
 	m_jkGui->ShowDebug(2,NULL,L"  BytesPerSector: %I64u",DiskInfo.BytesPerSector);
 	m_jkGui->ShowDebug(2,NULL,L"  TotalSectors: %I64u",DiskInfo.TotalSectors);
@@ -657,17 +864,27 @@ BOOL AnalyzeFatVolume(struct DefragDataStruct *Data) {
 	m_jkGui->ShowDebug(2,NULL,L"  SectorsPerTrack: %lu",BootSector.BPB_SecPerTrk);
 	m_jkGui->ShowDebug(2,NULL,L"  NumberOfHeads: %lu",BootSector.BPB_NumHeads);
 	m_jkGui->ShowDebug(2,NULL,L"  HiddenSectors: %lu",BootSector.BPB_HiddSec);
-	if (Data->Disk.Type != FAT32) {
+
+	if (Data->Disk.Type != FAT32)
+	{
 		m_jkGui->ShowDebug(2,NULL,L"  BS_DrvNum: %u",BootSector.Fat16.BS_DrvNum);
 		m_jkGui->ShowDebug(2,NULL,L"  BS_BootSig: %u",BootSector.Fat16.BS_BootSig);
 		m_jkGui->ShowDebug(2,NULL,L"  BS_VolID: %u",BootSector.Fat16.BS_VolID);
+
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat16.BS_VolLab[0],11);
+
 		s2[11] = '\0';
+
 		m_jkGui->ShowDebug(2,NULL,L"  VolLab: %S",s2);
+
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat16.BS_FilSysType[0],8);
+
 		s2[8] = '\0';
+
 		m_jkGui->ShowDebug(2,NULL,L"  FilSysType: %S",s2);
-	} else {
+	}
+	else
+	{
 		m_jkGui->ShowDebug(2,NULL,L"  FATSz32: %lu",BootSector.Fat32.BPB_FATSz32);
 		m_jkGui->ShowDebug(2,NULL,L"  ExtFlags: %lu",BootSector.Fat32.BPB_ExtFlags);
 		m_jkGui->ShowDebug(2,NULL,L"  FSVer: %lu",BootSector.Fat32.BPB_FSVer);
@@ -677,59 +894,89 @@ BOOL AnalyzeFatVolume(struct DefragDataStruct *Data) {
 		m_jkGui->ShowDebug(2,NULL,L"  DrvNum: %lu",BootSector.Fat32.BS_DrvNum);
 		m_jkGui->ShowDebug(2,NULL,L"  BootSig: %lu",BootSector.Fat32.BS_BootSig);
 		m_jkGui->ShowDebug(2,NULL,L"  VolID: %lu",BootSector.Fat32.BS_VolID);
+
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat32.BS_VolLab[0],11);
+
 		s2[11] = '\0';
+
 		m_jkGui->ShowDebug(2,NULL,L"  VolLab: %S",s2);
+
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat32.BS_FilSysType[0],8);
+
 		s2[8] = '\0';
+
 		m_jkGui->ShowDebug(2,NULL,L"  FilSysType: %S",s2);
 	}
 
 	/* Read the FAT from disk into memory. */
-	switch (Data->Disk.Type) {
+	switch (Data->Disk.Type)
+	{
 	case FAT12: FatSize = (size_t)((DiskInfo.CountofClusters + 1) + (DiskInfo.CountofClusters + 1) / 2); break;
 	case FAT16: FatSize = (size_t)((DiskInfo.CountofClusters + 1) * 2); break;
 	case FAT32: FatSize = (size_t)((DiskInfo.CountofClusters + 1) * 4); break;
 	}
-	if (FatSize % DiskInfo.BytesPerSector > 0) {
+
+	if (FatSize % DiskInfo.BytesPerSector > 0)
+	{
 		FatSize = (size_t)(FatSize + DiskInfo.BytesPerSector - FatSize % DiskInfo.BytesPerSector);
 	}
+
 	DiskInfo.FatData.FAT12 = (BYTE *)malloc(FatSize);
-	if (DiskInfo.FatData.FAT12 == NULL) {
+
+	if (DiskInfo.FatData.FAT12 == NULL)
+	{
 		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+
 		return(FALSE);
 	}
+
 	Trans.QuadPart         = BootSector.BPB_RsvdSecCnt * DiskInfo.BytesPerSector;
 	gOverlapped.Offset     = Trans.LowPart;
 	gOverlapped.OffsetHigh = Trans.HighPart;
 	gOverlapped.hEvent     = NULL;
+
 	m_jkGui->ShowDebug(2,NULL,L"Reading FAT, %lu bytes at offset=%I64u",FatSize,Trans.QuadPart);
+
 	Result = ReadFile(Data->Disk.VolumeHandle,DiskInfo.FatData.FAT12,(DWORD)FatSize,&BytesRead,&gOverlapped);
-	if (Result == 0) {
+
+	if (Result == 0)
+	{
 		SystemErrorStr(GetLastError(),s1,BUFSIZ);
+
 		m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+
 		return(FALSE);
 	}
+
 	//ShowHex(Data,DiskInfo.FatData.FAT12,32);
 
 	/* Read the root directory from disk into memory. */
-	if (Data->Disk.Type == FAT32) {
+	if (Data->Disk.Type == FAT32)
+	{
 		RootDirectory = LoadDirectory(Data,&DiskInfo,BootSector.Fat32.BPB_RootClus,&RootLength);
-	} else {
-		RootStart = (BootSector.BPB_RsvdSecCnt + BootSector.BPB_NumFATs * DiskInfo.FATSz) *
-			DiskInfo.BytesPerSector;
+	}
+	else
+	{
+		RootStart = (BootSector.BPB_RsvdSecCnt + BootSector.BPB_NumFATs * DiskInfo.FATSz) *	DiskInfo.BytesPerSector;
 		RootLength = BootSector.BPB_RootEntCnt * 32;
 
 		/* Sanity check. */
-		if (RootLength > UINT_MAX) {
+		if (RootLength > UINT_MAX)
+		{
 			m_jkGui->ShowDebug(2,NULL,L"Root directory is too big, %I64u bytes",RootLength);
+
 			free(DiskInfo.FatData.FAT12);
+
 			return(FALSE);
 		}
-		if (RootStart > (DiskInfo.CountofClusters + 1) * DiskInfo.SectorsPerCluster * DiskInfo.BytesPerSector) {
+
+		if (RootStart > (DiskInfo.CountofClusters + 1) * DiskInfo.SectorsPerCluster * DiskInfo.BytesPerSector)
+		{
 			m_jkGui->ShowDebug(2,NULL,L"Trying to access %I64u, but the last sector is at %I64u",
 				RootStart,(DiskInfo.CountofClusters + 1) * DiskInfo.SectorsPerCluster * DiskInfo.BytesPerSector);
+
 			free(DiskInfo.FatData.FAT12);
+
 			return(FALSE);
 		}
 
@@ -737,7 +984,9 @@ BOOL AnalyzeFatVolume(struct DefragDataStruct *Data) {
 		Microsoft has decided that raw reading from disk can only be done by whole sector,
 		even though ReadFile() accepts it's parameters in bytes. */
 		BytesRead = (DWORD)RootLength;
-		if (RootLength % DiskInfo.BytesPerSector > 0) {
+
+		if (RootLength % DiskInfo.BytesPerSector > 0)
+		{
 			BytesRead = (DWORD)(RootLength + DiskInfo.BytesPerSector - RootLength % DiskInfo.BytesPerSector);
 		}
 
@@ -751,20 +1000,26 @@ BOOL AnalyzeFatVolume(struct DefragDataStruct *Data) {
 
 		/* Read data from disk. */
 		Trans.QuadPart         = RootStart;
+
 		gOverlapped.Offset     = Trans.LowPart;
 		gOverlapped.OffsetHigh = Trans.HighPart;
 		gOverlapped.hEvent     = NULL;
-		m_jkGui->ShowDebug(6,NULL,L"Reading root directory, %lu bytes at offset=%I64u.",
-			BytesRead,Trans.QuadPart);
+
+		m_jkGui->ShowDebug(6,NULL,L"Reading root directory, %lu bytes at offset=%I64u.", BytesRead,Trans.QuadPart);
+
 		Result = ReadFile(Data->Disk.VolumeHandle,RootDirectory,BytesRead,&BytesRead,&gOverlapped);
-		if (Result == 0) {
+
+		if (Result == 0)
+		{
 			SystemErrorStr(GetLastError(),s1,BUFSIZ);
+
 			m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+
 			free(DiskInfo.FatData.FAT12);
 			free(RootDirectory);
+
 			return(FALSE);
 		}
-
 	}
 
 	/* Analyze all the items in the root directory and add to the item tree. */

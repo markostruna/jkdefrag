@@ -22,14 +22,16 @@ http://www.kessels.com/
 
 #include "StdAfx.h"
 
-#include "ScanNtfs.h"
-#include "ScanFat.h"
 #include "JkDefragLib.h"
 #include "JKDefragStruct.h"
 #include "JKDefragLog.h"
 #include "JkDefragGui.h"
+#include "ScanNtfs.h"
+#include "ScanFat.h"
 
 static JKDefragGui *m_jkGui = JKDefragGui::getInstance();
+static JKScanFat   *m_jkScanFat = JKScanFat::getInstance();
+static JKScanNtfs  *m_jkScanNtfs = JKScanNtfs::getInstance();
 
 /*
 All the text strings used by the defragger library.
@@ -2918,10 +2920,10 @@ void AnalyzeVolume(struct DefragDataStruct *Data) {
 	}
 
 	/* Scan NTFS disks. */
-	Result = AnalyzeNtfsVolume(Data);
+	Result = m_jkScanNtfs->AnalyzeNtfsVolume(Data);
 
 	/* Scan FAT disks. */
-	if ((Result == FALSE) && (*Data->Running == RUNNING)) Result = AnalyzeFatVolume(Data);
+	if ((Result == FALSE) && (*Data->Running == RUNNING)) Result = m_jkScanFat->AnalyzeFatVolume(Data);
 
 	/* Scan all other filesystems. */
 	if ((Result == FALSE) && (*Data->Running == RUNNING)) {
