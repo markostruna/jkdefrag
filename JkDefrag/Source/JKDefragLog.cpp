@@ -1,11 +1,10 @@
 #include "StdAfx.h"
 
-#include "JKDefragLog.h"
-#include "JkDefragLib.h"
-
 JKDefragLog::JKDefragLog()
 {
 	WCHAR *p1;
+
+	m_jkLib = JKDefragLib::getInstance();
 
 	GetModuleFileNameW(NULL,MyName,MAX_PATH);
 	GetShortPathNameW(MyName,MyShortName,MAX_PATH);
@@ -14,9 +13,9 @@ JKDefragLog::JKDefragLog()
 	/* Determine default path to logfile. */
 	swprintf_s(LogFile,MAX_PATH,L"%s",MyName);
 
-	p1 = stristrW(LogFile,L".exe");
+	p1 = m_jkLib->stristrW(LogFile,L".exe");
 
-	if (p1 == NULL) p1 = stristrW(LogFile,L".scr");
+	if (p1 == NULL) p1 = m_jkLib->stristrW(LogFile,L".scr");
 
 	if (p1 != NULL)
 	{

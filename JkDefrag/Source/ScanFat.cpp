@@ -10,7 +10,7 @@ JKScanFat *JKScanFat::m_jkScanFat = 0;
 
 JKScanFat::JKScanFat()
 {
-	m_jkGui = JKDefragGui::getInstance();
+	m_jkLib = JKDefragLib::getInstance();
 }
 
 JKScanFat::~JKScanFat()
@@ -91,6 +91,8 @@ void JKScanFat::MakeFragmentList(struct DefragDataStruct *Data, struct FatDiskIn
 
 	int MaxIterate;
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	Item->Clusters = 0;
 	Item->Fragments = NULL;
 
@@ -124,7 +126,7 @@ void JKScanFat::MakeFragmentList(struct DefragDataStruct *Data, struct FatDiskIn
 
 			if (NewFragment == NULL)
 			{
-				m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+				jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 				return;
 			}
 
@@ -171,7 +173,7 @@ void JKScanFat::MakeFragmentList(struct DefragDataStruct *Data, struct FatDiskIn
 	/* If too many iterations (infinite loop in FAT) then exit. */
 	if (MaxIterate >= DiskInfo->CountofClusters + 1)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
+		jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
 
 		return;
 	}
@@ -183,7 +185,7 @@ void JKScanFat::MakeFragmentList(struct DefragDataStruct *Data, struct FatDiskIn
 
 		if (NewFragment == NULL)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+			jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 
 			return;
 		}
@@ -227,6 +229,8 @@ BYTE *JKScanFat::LoadDirectory(struct DefragDataStruct *Data, struct FatDiskInfo
 	int MaxIterate;
 
 	WCHAR s1[BUFSIZ];
+
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
 
 	/* Reset the OutLength to zero, in case we exit for an error. */
 	if (OutLength != NULL) *OutLength = 0;
@@ -274,7 +278,7 @@ BYTE *JKScanFat::LoadDirectory(struct DefragDataStruct *Data, struct FatDiskInfo
 	/* If too many iterations (infinite loop in FAT) then return NULL. */
 	if (MaxIterate >= DiskInfo->CountofClusters + 1)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
+		jkGui->ShowDebug(2,NULL,L"Infinite loop in FAT detected, perhaps the disk is corrupted.");
 
 		return(NULL);
 	}
@@ -282,7 +286,7 @@ BYTE *JKScanFat::LoadDirectory(struct DefragDataStruct *Data, struct FatDiskInfo
 	/* Allocate buffer. */
 	if (BufferLength > UINT_MAX)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Directory is too big, %I64u bytes",BufferLength);
+		jkGui->ShowDebug(2,NULL,L"Directory is too big, %I64u bytes",BufferLength);
 
 		return(NULL);
 	}
@@ -291,7 +295,7 @@ BYTE *JKScanFat::LoadDirectory(struct DefragDataStruct *Data, struct FatDiskInfo
 
 	if (Buffer == NULL)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+		jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 
 		return(NULL);
 	}
@@ -324,15 +328,15 @@ BYTE *JKScanFat::LoadDirectory(struct DefragDataStruct *Data, struct FatDiskInfo
 			gOverlapped.OffsetHigh = Trans.HighPart;
 			gOverlapped.hEvent     = NULL;
 
-			m_jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.", FragmentLength,Trans.QuadPart);
+			jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.", FragmentLength,Trans.QuadPart);
 
 			Result = ReadFile(Data->Disk.VolumeHandle,&Buffer[BufferOffset],(DWORD)FragmentLength,&BytesRead,&gOverlapped);
 
 			if (Result == 0)
 			{
-				SystemErrorStr(GetLastError(),s1,BUFSIZ);
+				m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-				m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+				jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
 
 				free(Buffer);
 
@@ -373,15 +377,15 @@ BYTE *JKScanFat::LoadDirectory(struct DefragDataStruct *Data, struct FatDiskInfo
 		gOverlapped.OffsetHigh = Trans.HighPart;
 		gOverlapped.hEvent     = NULL;
 
-		m_jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.", FragmentLength,Trans.QuadPart);
+		jkGui->ShowDebug(6,NULL,L"Reading directory fragment, %I64u bytes at offset=%I64u.", FragmentLength,Trans.QuadPart);
 
 		Result = ReadFile(Data->Disk.VolumeHandle,&Buffer[BufferOffset],(DWORD)FragmentLength, &BytesRead,&gOverlapped);
 
 		if (Result == 0)
 		{
-			SystemErrorStr(GetLastError(),s1,BUFSIZ);
+			m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-			m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+			jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
 
 			free(Buffer);
 
@@ -419,12 +423,14 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 
 	int i;
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* Sanity check. */
 	if ((Buffer == NULL) || (Length == 0)) return;
 
 	/* Slow the program down to the percentage that was specified on the
 	command line. */
-	SlowDown(Data);
+	m_jkLib->SlowDown(Data);
 
 	//ShowHex(Data,Buffer,256);
 
@@ -441,7 +447,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		/* Ignore free (not used) entries. */
 		if (Dir->DIR_Name[0] == 0xE5)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"%u.\tFree (not used)",Index/32);
+			jkGui->ShowDebug(6,NULL,L"%u.\tFree (not used)",Index/32);
 
 			continue;
 		}
@@ -449,7 +455,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		/* Exit at the end of the directory. */
 		if (Dir->DIR_Name[0] == 0)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"%u.\tFree (not used), end of directory.",Index/32);
+			jkGui->ShowDebug(6,NULL,L"%u.\tFree (not used), end of directory.",Index/32);
 
 			break;
 		}
@@ -459,7 +465,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		{
 			LDir = (struct FatLongNameDirStruct *)&Buffer[Index];
 
-			m_jkGui->ShowDebug(6,NULL,L"%u.\tLong filename part.",Index/32);
+			jkGui->ShowDebug(6,NULL,L"%u.\tLong filename part.",Index/32);
 
 			i = (LDir->LDIR_Ord & 0x3F);
 
@@ -517,7 +523,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		else
 		if (CalculateShortNameCheckSum(Dir->DIR_Name) != LongNameChecksum)
 		{
-			m_jkGui->ShowDebug(0,NULL,L"%u.\tError: long filename is out of sync");
+			jkGui->ShowDebug(0,NULL,L"%u.\tError: long filename is out of sync");
 			LongName[0] = '\0';
 		}
 
@@ -562,14 +568,14 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 
 			if (p1 != NULL) wcscpy_s(p1,wcslen(p1),p1+1);
 
-			m_jkGui->ShowDebug(6,NULL,L"%u.\t'%s' (volume ID)",Index/32,ShortName);
+			jkGui->ShowDebug(6,NULL,L"%u.\t'%s' (volume ID)",Index/32,ShortName);
 			
 			continue;
 		}
 
 		if ((Dir->DIR_Attr & (ATTR_DIRECTORY | ATTR_VOLUME_ID)) == (ATTR_DIRECTORY | ATTR_VOLUME_ID))
 		{
-			m_jkGui->ShowDebug(6,NULL,L"%u.\tInvalid directory entry");
+			jkGui->ShowDebug(6,NULL,L"%u.\tInvalid directory entry");
 		
 			continue;
 		}
@@ -577,14 +583,14 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		/* Ignore "." and "..". */
 		if (wcscmp(ShortName,L".") == 0)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"%u.\t'.'",Index/32);
+			jkGui->ShowDebug(6,NULL,L"%u.\t'.'",Index/32);
 
 			continue;
 		}
 
 		if (wcscmp(ShortName,L"..") == 0)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"%u.\t'..'",Index/32);
+			jkGui->ShowDebug(6,NULL,L"%u.\t'..'",Index/32);
 
 			continue;
 		}
@@ -594,7 +600,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 
 		if (Item == NULL)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+			jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 			break;
 		}
 
@@ -605,7 +611,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		else
 		{
 			Item->ShortFilename = _wcsdup(ShortName);
-			m_jkGui->ShowDebug(6,NULL,L"%u.\t'%s'",Index/32,ShortName);
+			jkGui->ShowDebug(6,NULL,L"%u.\t'%s'",Index/32,ShortName);
 		}
 
 		if (LongName[0] == '\0')
@@ -615,7 +621,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		else
 		{
 			Item->LongFilename = _wcsdup(LongName);
-			m_jkGui->ShowDebug(6,NULL,L"\tLong filename = '%s'",LongName);
+			jkGui->ShowDebug(6,NULL,L"\tLong filename = '%s'",LongName);
 		}
 
 		if ((Item->LongFilename != NULL) &&
@@ -658,15 +664,15 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		Item->Exclude = NO;
 		Item->SpaceHog = NO;
 
-		m_jkGui->ShowDebug(6,NULL,L"\tSize = %I64u clusters, %I64u bytes",Item->Clusters,Item->Bytes);
+		jkGui->ShowDebug(6,NULL,L"\tSize = %I64u clusters, %I64u bytes",Item->Clusters,Item->Bytes);
 
 		/* Add the item record to the sorted item tree in memory. */
-		TreeInsert(Data,Item);
+		m_jkLib->TreeInsert(Data,Item);
 
 		/* Draw the item on the screen. */
-		m_jkGui->ShowAnalyze(Data,Item);
+		jkGui->ShowAnalyze(Data,Item);
 //		if (*Data->RedrawScreen == NO) {
-			ColorizeItem(Data,Item,0,0,NO);
+			m_jkLib->ColorizeItem(Data,Item,0,0,NO);
 //		} else {
 //			ShowDiskmap(Data);
 //		}
@@ -681,7 +687,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 		Data->CountAllBytes = Data->CountAllBytes + Item->Bytes;
 		Data->CountAllClusters = Data->CountAllClusters + Item->Clusters;
 
-		if (FragmentCount(Item) > 1)
+		if (m_jkLib->FragmentCount(Item) > 1)
 		{
 			Data->CountFragmentedItems = Data->CountFragmentedItems + 1;
 			Data->CountFragmentedBytes = Data->CountFragmentedBytes + Item->Bytes;
@@ -697,7 +703,7 @@ void JKScanFat::AnalyzeFatDirectory(struct DefragDataStruct *Data, struct FatDis
 
 			free(SubDirBuf);
 
-			m_jkGui->ShowDebug(6,NULL,L"Finished with subdirectory.");
+			jkGui->ShowDebug(6,NULL,L"Finished with subdirectory.");
 		}
 	}
 }
@@ -760,6 +766,8 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 
 	char s2[BUFSIZ];
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* Read the boot block from the disk. */
 	gOverlapped.Offset     = 0;
 	gOverlapped.OffsetHigh = 0;
@@ -769,9 +777,9 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 
 	if ((Result == 0) || (BytesRead != 512))
 	{
-		SystemErrorStr(GetLastError(),s1,BUFSIZ);
+		m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-		m_jkGui->ShowDebug(2,NULL,L"Error while reading bootblock: %s",s1);
+		jkGui->ShowDebug(2,NULL,L"Error while reading bootblock: %s",s1);
 
 		return(FALSE);
 	}
@@ -781,7 +789,7 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 		(((BootSector.BS_jmpBoot[0] != 0xEB) || (BootSector.BS_jmpBoot[2] != 0x90)) &&
 		(BootSector.BS_jmpBoot[0] != 0xE9)))
 	{
-		m_jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (different cookie).");
+		jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (different cookie).");
 	
 		return(FALSE);
 	}
@@ -791,7 +799,7 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 
 	if (DiskInfo.BytesPerSector == 0)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (BytesPerSector is zero).");
+		jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (BytesPerSector is zero).");
 
 		return(FALSE);
 	}
@@ -800,7 +808,7 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 
 	if (DiskInfo.SectorsPerCluster == 0)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (SectorsPerCluster is zero).");
+		jkGui->ShowDebug(2,NULL,L"This is not a FAT disk (SectorsPerCluster is zero).");
 
 		return(FALSE);
 	}
@@ -824,20 +832,21 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 	if (DiskInfo.CountofClusters < 4085)
 	{
 		Data->Disk.Type = FAT12;
-		m_jkGui->ShowDebug(0,NULL,L"This is a FAT12 disk.");
+
+		jkGui->ShowDebug(0,NULL,L"This is a FAT12 disk.");
 	}
 	else
 	if (DiskInfo.CountofClusters < 65525)
 	{
 		Data->Disk.Type = FAT16;
 		
-		m_jkGui->ShowDebug(0,NULL,L"This is a FAT16 disk.");
+		jkGui->ShowDebug(0,NULL,L"This is a FAT16 disk.");
 	}
 	else
 	{
 		Data->Disk.Type = FAT32;
 
-		m_jkGui->ShowDebug(0,NULL,L"This is a FAT32 disk.");
+		jkGui->ShowDebug(0,NULL,L"This is a FAT32 disk.");
 	}
 
 	Data->BytesPerCluster = DiskInfo.BytesPerSector * DiskInfo.SectorsPerCluster;
@@ -848,64 +857,64 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 
 	s2[8] = '\0';
 
-	m_jkGui->ShowDebug(2,NULL,L"  OEMName: %S",s2);
-	m_jkGui->ShowDebug(2,NULL,L"  BytesPerSector: %I64u",DiskInfo.BytesPerSector);
-	m_jkGui->ShowDebug(2,NULL,L"  TotalSectors: %I64u",DiskInfo.TotalSectors);
-	m_jkGui->ShowDebug(2,NULL,L"  SectorsPerCluster: %I64u",DiskInfo.SectorsPerCluster);
-	m_jkGui->ShowDebug(2,NULL,L"  RootDirSectors: %I64u",DiskInfo.RootDirSectors);
-	m_jkGui->ShowDebug(2,NULL,L"  FATSz: %I64u",DiskInfo.FATSz);
-	m_jkGui->ShowDebug(2,NULL,L"  FirstDataSector: %I64u",DiskInfo.FirstDataSector);
-	m_jkGui->ShowDebug(2,NULL,L"  DataSec: %I64u",DiskInfo.DataSec);
-	m_jkGui->ShowDebug(2,NULL,L"  CountofClusters: %I64u",DiskInfo.CountofClusters);
-	m_jkGui->ShowDebug(2,NULL,L"  ReservedSectors: %lu",BootSector.BPB_RsvdSecCnt);
-	m_jkGui->ShowDebug(2,NULL,L"  NumberFATs: %lu",BootSector.BPB_NumFATs);
-	m_jkGui->ShowDebug(2,NULL,L"  RootEntriesCount: %lu",BootSector.BPB_RootEntCnt);
-	m_jkGui->ShowDebug(2,NULL,L"  MediaType: %X",BootSector.BPB_Media);
-	m_jkGui->ShowDebug(2,NULL,L"  SectorsPerTrack: %lu",BootSector.BPB_SecPerTrk);
-	m_jkGui->ShowDebug(2,NULL,L"  NumberOfHeads: %lu",BootSector.BPB_NumHeads);
-	m_jkGui->ShowDebug(2,NULL,L"  HiddenSectors: %lu",BootSector.BPB_HiddSec);
+	jkGui->ShowDebug(2,NULL,L"  OEMName: %S",s2);
+	jkGui->ShowDebug(2,NULL,L"  BytesPerSector: %I64u",DiskInfo.BytesPerSector);
+	jkGui->ShowDebug(2,NULL,L"  TotalSectors: %I64u",DiskInfo.TotalSectors);
+	jkGui->ShowDebug(2,NULL,L"  SectorsPerCluster: %I64u",DiskInfo.SectorsPerCluster);
+	jkGui->ShowDebug(2,NULL,L"  RootDirSectors: %I64u",DiskInfo.RootDirSectors);
+	jkGui->ShowDebug(2,NULL,L"  FATSz: %I64u",DiskInfo.FATSz);
+	jkGui->ShowDebug(2,NULL,L"  FirstDataSector: %I64u",DiskInfo.FirstDataSector);
+	jkGui->ShowDebug(2,NULL,L"  DataSec: %I64u",DiskInfo.DataSec);
+	jkGui->ShowDebug(2,NULL,L"  CountofClusters: %I64u",DiskInfo.CountofClusters);
+	jkGui->ShowDebug(2,NULL,L"  ReservedSectors: %lu",BootSector.BPB_RsvdSecCnt);
+	jkGui->ShowDebug(2,NULL,L"  NumberFATs: %lu",BootSector.BPB_NumFATs);
+	jkGui->ShowDebug(2,NULL,L"  RootEntriesCount: %lu",BootSector.BPB_RootEntCnt);
+	jkGui->ShowDebug(2,NULL,L"  MediaType: %X",BootSector.BPB_Media);
+	jkGui->ShowDebug(2,NULL,L"  SectorsPerTrack: %lu",BootSector.BPB_SecPerTrk);
+	jkGui->ShowDebug(2,NULL,L"  NumberOfHeads: %lu",BootSector.BPB_NumHeads);
+	jkGui->ShowDebug(2,NULL,L"  HiddenSectors: %lu",BootSector.BPB_HiddSec);
 
 	if (Data->Disk.Type != FAT32)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"  BS_DrvNum: %u",BootSector.Fat16.BS_DrvNum);
-		m_jkGui->ShowDebug(2,NULL,L"  BS_BootSig: %u",BootSector.Fat16.BS_BootSig);
-		m_jkGui->ShowDebug(2,NULL,L"  BS_VolID: %u",BootSector.Fat16.BS_VolID);
+		jkGui->ShowDebug(2,NULL,L"  BS_DrvNum: %u",BootSector.Fat16.BS_DrvNum);
+		jkGui->ShowDebug(2,NULL,L"  BS_BootSig: %u",BootSector.Fat16.BS_BootSig);
+		jkGui->ShowDebug(2,NULL,L"  BS_VolID: %u",BootSector.Fat16.BS_VolID);
 
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat16.BS_VolLab[0],11);
 
 		s2[11] = '\0';
 
-		m_jkGui->ShowDebug(2,NULL,L"  VolLab: %S",s2);
+		jkGui->ShowDebug(2,NULL,L"  VolLab: %S",s2);
 
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat16.BS_FilSysType[0],8);
 
 		s2[8] = '\0';
 
-		m_jkGui->ShowDebug(2,NULL,L"  FilSysType: %S",s2);
+		jkGui->ShowDebug(2,NULL,L"  FilSysType: %S",s2);
 	}
 	else
 	{
-		m_jkGui->ShowDebug(2,NULL,L"  FATSz32: %lu",BootSector.Fat32.BPB_FATSz32);
-		m_jkGui->ShowDebug(2,NULL,L"  ExtFlags: %lu",BootSector.Fat32.BPB_ExtFlags);
-		m_jkGui->ShowDebug(2,NULL,L"  FSVer: %lu",BootSector.Fat32.BPB_FSVer);
-		m_jkGui->ShowDebug(2,NULL,L"  RootClus: %lu",BootSector.Fat32.BPB_RootClus);
-		m_jkGui->ShowDebug(2,NULL,L"  FSInfo: %lu",BootSector.Fat32.BPB_FSInfo);
-		m_jkGui->ShowDebug(2,NULL,L"  BkBootSec: %lu",BootSector.Fat32.BPB_BkBootSec);
-		m_jkGui->ShowDebug(2,NULL,L"  DrvNum: %lu",BootSector.Fat32.BS_DrvNum);
-		m_jkGui->ShowDebug(2,NULL,L"  BootSig: %lu",BootSector.Fat32.BS_BootSig);
-		m_jkGui->ShowDebug(2,NULL,L"  VolID: %lu",BootSector.Fat32.BS_VolID);
+		jkGui->ShowDebug(2,NULL,L"  FATSz32: %lu",BootSector.Fat32.BPB_FATSz32);
+		jkGui->ShowDebug(2,NULL,L"  ExtFlags: %lu",BootSector.Fat32.BPB_ExtFlags);
+		jkGui->ShowDebug(2,NULL,L"  FSVer: %lu",BootSector.Fat32.BPB_FSVer);
+		jkGui->ShowDebug(2,NULL,L"  RootClus: %lu",BootSector.Fat32.BPB_RootClus);
+		jkGui->ShowDebug(2,NULL,L"  FSInfo: %lu",BootSector.Fat32.BPB_FSInfo);
+		jkGui->ShowDebug(2,NULL,L"  BkBootSec: %lu",BootSector.Fat32.BPB_BkBootSec);
+		jkGui->ShowDebug(2,NULL,L"  DrvNum: %lu",BootSector.Fat32.BS_DrvNum);
+		jkGui->ShowDebug(2,NULL,L"  BootSig: %lu",BootSector.Fat32.BS_BootSig);
+		jkGui->ShowDebug(2,NULL,L"  VolID: %lu",BootSector.Fat32.BS_VolID);
 
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat32.BS_VolLab[0],11);
 
 		s2[11] = '\0';
 
-		m_jkGui->ShowDebug(2,NULL,L"  VolLab: %S",s2);
+		jkGui->ShowDebug(2,NULL,L"  VolLab: %S",s2);
 
 		strncpy_s(s2,BUFSIZ,(char *)&BootSector.Fat32.BS_FilSysType[0],8);
 
 		s2[8] = '\0';
 
-		m_jkGui->ShowDebug(2,NULL,L"  FilSysType: %S",s2);
+		jkGui->ShowDebug(2,NULL,L"  FilSysType: %S",s2);
 	}
 
 	/* Read the FAT from disk into memory. */
@@ -925,7 +934,7 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 
 	if (DiskInfo.FatData.FAT12 == NULL)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+		jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 
 		return(FALSE);
 	}
@@ -935,15 +944,15 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 	gOverlapped.OffsetHigh = Trans.HighPart;
 	gOverlapped.hEvent     = NULL;
 
-	m_jkGui->ShowDebug(2,NULL,L"Reading FAT, %lu bytes at offset=%I64u",FatSize,Trans.QuadPart);
+	jkGui->ShowDebug(2,NULL,L"Reading FAT, %lu bytes at offset=%I64u",FatSize,Trans.QuadPart);
 
 	Result = ReadFile(Data->Disk.VolumeHandle,DiskInfo.FatData.FAT12,(DWORD)FatSize,&BytesRead,&gOverlapped);
 
 	if (Result == 0)
 	{
-		SystemErrorStr(GetLastError(),s1,BUFSIZ);
+		m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-		m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+		jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
 
 		return(FALSE);
 	}
@@ -963,7 +972,7 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 		/* Sanity check. */
 		if (RootLength > UINT_MAX)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Root directory is too big, %I64u bytes",RootLength);
+			jkGui->ShowDebug(2,NULL,L"Root directory is too big, %I64u bytes",RootLength);
 
 			free(DiskInfo.FatData.FAT12);
 
@@ -972,7 +981,7 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 
 		if (RootStart > (DiskInfo.CountofClusters + 1) * DiskInfo.SectorsPerCluster * DiskInfo.BytesPerSector)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Trying to access %I64u, but the last sector is at %I64u",
+			jkGui->ShowDebug(2,NULL,L"Trying to access %I64u, but the last sector is at %I64u",
 				RootStart,(DiskInfo.CountofClusters + 1) * DiskInfo.SectorsPerCluster * DiskInfo.BytesPerSector);
 
 			free(DiskInfo.FatData.FAT12);
@@ -993,7 +1002,7 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 		/* Allocate buffer. */
 		RootDirectory = (BYTE *)malloc(BytesRead);
 		if (RootDirectory == NULL) {
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+			jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 			free(DiskInfo.FatData.FAT12);
 			return(FALSE);
 		}
@@ -1005,15 +1014,15 @@ BOOL JKScanFat::AnalyzeFatVolume(struct DefragDataStruct *Data)
 		gOverlapped.OffsetHigh = Trans.HighPart;
 		gOverlapped.hEvent     = NULL;
 
-		m_jkGui->ShowDebug(6,NULL,L"Reading root directory, %lu bytes at offset=%I64u.", BytesRead,Trans.QuadPart);
+		jkGui->ShowDebug(6,NULL,L"Reading root directory, %lu bytes at offset=%I64u.", BytesRead,Trans.QuadPart);
 
 		Result = ReadFile(Data->Disk.VolumeHandle,RootDirectory,BytesRead,&BytesRead,&gOverlapped);
 
 		if (Result == 0)
 		{
-			SystemErrorStr(GetLastError(),s1,BUFSIZ);
+			m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-			m_jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
+			jkGui->ShowDebug(2,NULL,L"Error: %s",s1);
 
 			free(DiskInfo.FatData.FAT12);
 			free(RootDirectory);

@@ -118,6 +118,9 @@ private:
 	// pointer to logger
 	JKDefragLog *m_jkLog;
 
+	// pointer to library
+	JKDefragLib *m_jkLib;
+
 	// static member that is an instance of itself
 	static JKDefragGui *m_jkDefragGui;
 };

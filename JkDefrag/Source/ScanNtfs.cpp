@@ -10,7 +10,7 @@ JKScanNtfs *JKScanNtfs::m_jkScanNtfs = 0;
 
 JKScanNtfs::JKScanNtfs()
 {
-	m_jkGui = JKDefragGui::getInstance();
+//	m_jkGui = JKDefragGui::getInstance();
 }
 
 JKScanNtfs::~JKScanNtfs()
@@ -81,6 +81,8 @@ BOOL JKScanNtfs::FixupRawMftdata(struct DefragDataStruct *Data,struct NtfsDiskIn
 
 	USHORT i;
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* Sanity check. */
 	if (Buffer == NULL) return(FALSE);
 	if (BufLength < sizeof(struct NTFS_RECORD_HEADER)) return(FALSE);
@@ -88,9 +90,9 @@ BOOL JKScanNtfs::FixupRawMftdata(struct DefragDataStruct *Data,struct NtfsDiskIn
 	/* If this is not a FILE record then return FALSE. */
 	if (memcmp(Buffer,"FILE",4) != 0)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"This is not a valid MFT record, it does not begin with FILE (maybe trying to read past the end?).");
+		jkGui->ShowDebug(2,NULL,L"This is not a valid MFT record, it does not begin with FILE (maybe trying to read past the end?).");
 
-		ShowHex(Data,Buffer,BufLength);
+		m_jkLib->ShowHex(Data,Buffer,BufLength);
 
 		return(FALSE);
 	}
@@ -113,14 +115,14 @@ BOOL JKScanNtfs::FixupRawMftdata(struct DefragDataStruct *Data,struct NtfsDiskIn
 		/* Check if we are inside the buffer. */
 		if (Index * sizeof(WORD) >= BufLength)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Warning: USA data indicates that data is missing, the MFT may be corrupt.");
+			jkGui->ShowDebug(2,NULL,L"Warning: USA data indicates that data is missing, the MFT may be corrupt.");
 		}
 
 		/* Check if the last 2 bytes of the sector contain the Update Sequence Number.
 		If not then return FALSE. */
 		if (BufferW[Index] != UpdateSequenceArray[0])
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: USA fixup word is not equal to the Update Sequence Number, the MFT may be corrupt.");
+			jkGui->ShowDebug(2,NULL,L"Error: USA fixup word is not equal to the Update Sequence Number, the MFT may be corrupt.");
 		
 			return(FALSE);
 		}
@@ -185,13 +187,15 @@ BYTE *JKScanNtfs::ReadNonResidentData(
 
 	int i;
 
-	m_jkGui->ShowDebug(6,NULL,L"    Reading %I64u bytes from offset %I64u",WantedLength,Offset);
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
+	jkGui->ShowDebug(6,NULL,L"    Reading %I64u bytes from offset %I64u",WantedLength,Offset);
 
 	/* Sanity check. */
 	if ((RunData == NULL) || (RunDataLength == 0)) return(NULL);
 	if (WantedLength >= INT_MAX)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"    Cannot read %I64u bytes, maximum is %lu.",WantedLength,INT_MAX);
+		jkGui->ShowDebug(2,NULL,L"    Cannot read %I64u bytes, maximum is %lu.",WantedLength,INT_MAX);
 
 		return(NULL);
 	}
@@ -211,7 +215,7 @@ BYTE *JKScanNtfs::ReadNonResidentData(
 
 	if (Buffer == NULL)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+		jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 	
 		return(NULL);
 	}
@@ -233,7 +237,7 @@ BYTE *JKScanNtfs::ReadNonResidentData(
 
 		if (Index >= RunDataLength)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.");
+			jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.");
 		
 			return(FALSE);
 		}
@@ -248,7 +252,7 @@ BYTE *JKScanNtfs::ReadNonResidentData(
 
 			if (Index >= RunDataLength)
 			{
-					m_jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.");
+					jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.");
 			
 					return(FALSE);
 			}
@@ -264,7 +268,7 @@ BYTE *JKScanNtfs::ReadNonResidentData(
 
 			if (Index >= RunDataLength)
 			{
-				m_jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.");
+				jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.");
 			
 				return(FALSE);
 			}
@@ -308,7 +312,7 @@ BYTE *JKScanNtfs::ReadNonResidentData(
 		if (ExtentLength == 0) continue;
 
 		/* Read the data from the disk. If error then return FALSE. */
-		m_jkGui->ShowDebug(6,NULL,L"    Reading %I64u bytes from Lcn=%I64u into offset=%I64u",
+		jkGui->ShowDebug(6,NULL,L"    Reading %I64u bytes from Lcn=%I64u into offset=%I64u",
 				ExtentLength,ExtentLcn / (DiskInfo->BytesPerSector * DiskInfo->SectorsPerCluster),
 				ExtentVcn - Offset);
 
@@ -322,9 +326,9 @@ BYTE *JKScanNtfs::ReadNonResidentData(
 
 		if (Result == 0)
 		{
-			SystemErrorStr(GetLastError(),s1,BUFSIZ);
+			m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-			m_jkGui->ShowDebug(2,NULL,L"Error while reading disk: %s",s1);
+			jkGui->ShowDebug(2,NULL,L"Error while reading disk: %s",s1);
 
 			free(Buffer);
 
@@ -372,6 +376,8 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 
 	int i;
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* Sanity check. */
 	if ((Data == NULL) || (InodeData == NULL)) return(FALSE);
 
@@ -388,12 +394,12 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 	{
 		if (StreamName != NULL)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"    Creating new stream: '%s:%s'",
+			jkGui->ShowDebug(6,NULL,L"    Creating new stream: '%s:%s'",
 					StreamName,StreamTypeNames(StreamType));
 		}
 		else
 		{
-			m_jkGui->ShowDebug(6,NULL,L"    Creating new stream: ':%s'",
+			jkGui->ShowDebug(6,NULL,L"    Creating new stream: ':%s'",
 					StreamTypeNames(StreamType));
 		}
 
@@ -401,7 +407,7 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 
 		if (Stream == NULL)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+			jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 		
 			return(FALSE);
 		}
@@ -426,12 +432,12 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 	{
 		if (StreamName != NULL)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"    Appending rundata to existing stream: '%s:%s",
+			jkGui->ShowDebug(6,NULL,L"    Appending rundata to existing stream: '%s:%s",
 				StreamName,StreamTypeNames(StreamType));
 		}
 		else
 		{
-			m_jkGui->ShowDebug(6,NULL,L"    Appending rundata to existing stream: ':%s",
+			jkGui->ShowDebug(6,NULL,L"    Appending rundata to existing stream: ':%s",
 				StreamTypeNames(StreamType));
 		}
 
@@ -447,7 +453,7 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 	
 		if (StartingVcn != LastFragment->NextVcn)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: Inode %I64u already has a list of fragments. LastVcn=%I64u, StartingVCN=%I64u",
+			jkGui->ShowDebug(2,NULL,L"Error: Inode %I64u already has a list of fragments. LastVcn=%I64u, StartingVCN=%I64u",
 					InodeData->Inode,LastFragment->NextVcn,StartingVcn);
 
 			return(FALSE);
@@ -471,7 +477,7 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 
 		if (Index >= RunDataLength)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.",
+			jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.",
 					InodeData->Inode);
 			return(FALSE);
 		}
@@ -486,7 +492,7 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 
 			if (Index >= RunDataLength)
 			{
-				m_jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.",
+				jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.",
 						InodeData->Inode);
 			
 				return(FALSE);
@@ -503,7 +509,7 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 
 			if (Index >= RunDataLength)
 			{
-				m_jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.",
+				jkGui->ShowDebug(2,NULL,L"Error: datarun is longer than buffer, the MFT may be corrupt.",
 						InodeData->Inode);
 			
 				return(FALSE);
@@ -519,11 +525,11 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 		/* Show debug message. */
 		if (RunOffset.Value != 0)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"    Extent: Lcn=%I64u, Vcn=%I64u, NextVcn=%I64u", Lcn,Vcn - RunLength.Value,Vcn);
+			jkGui->ShowDebug(6,NULL,L"    Extent: Lcn=%I64u, Vcn=%I64u, NextVcn=%I64u", Lcn,Vcn - RunLength.Value,Vcn);
 		}
 		else
 		{
-			m_jkGui->ShowDebug(6,NULL,L"    Extent (virtual): Vcn=%I64u, NextVcn=%I64u", Vcn - RunLength.Value, Vcn);
+			jkGui->ShowDebug(6,NULL,L"    Extent (virtual): Vcn=%I64u, NextVcn=%I64u", Vcn - RunLength.Value, Vcn);
 		}
 
 		/* Add the size of the fragment to the total number of clusters.
@@ -541,7 +547,7 @@ BOOL JKScanNtfs::TranslateRundataToFragmentlist(
 
 		if (NewFragment == NULL)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+			jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 		
 			return(FALSE);
 		}
@@ -748,17 +754,19 @@ void JKScanNtfs::ProcessAttributeList(
 	WCHAR *p1;
 	WCHAR s1[BUFSIZ];
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* Sanity checks. */
 	if ((Buffer == NULL) || (BufLength == 0)) return;
 
 	if (Depth > 1000)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: infinite attribute loop, the MFT may be corrupt.");
+		jkGui->ShowDebug(2,NULL,L"Error: infinite attribute loop, the MFT may be corrupt.");
 	
 		return;
 	}
 
-	m_jkGui->ShowDebug(6,NULL,L"    Processing AttributeList for Inode %I64u, %u bytes", InodeData->Inode,BufLength);
+	jkGui->ShowDebug(6,NULL,L"    Processing AttributeList for Inode %I64u, %u bytes", InodeData->Inode,BufLength);
 
 	/* Walk through all the attributes and gather information. */
 	for (AttributeOffset = 0; AttributeOffset < BufLength; AttributeOffset = AttributeOffset + Attribute->Length)
@@ -782,8 +790,8 @@ void JKScanNtfs::ProcessAttributeList(
 		if (RefInode == InodeData->Inode) continue;
 
 		/* Show debug message. */
-		m_jkGui->ShowDebug(6,NULL,L"    List attribute: %s",StreamTypeNames(Attribute->AttributeType));
-		m_jkGui->ShowDebug(6,NULL,L"      LowestVcn = %I64u, RefInode = %I64u, InodeSequence = %u, Instance = %u",
+		jkGui->ShowDebug(6,NULL,L"    List attribute: %s",StreamTypeNames(Attribute->AttributeType));
+		jkGui->ShowDebug(6,NULL,L"      LowestVcn = %I64u, RefInode = %I64u, InodeSequence = %u, Instance = %u",
 				Attribute->LowestVcn,RefInode,Attribute->FileReferenceNumber.SequenceNumber,Attribute->Instance);
 
 		/* Extract the streamname. I don't know why AttributeLists can have names, and
@@ -795,7 +803,7 @@ void JKScanNtfs::ProcessAttributeList(
 
 			if (p1 == NULL)
 			{
-				m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+				jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 			
 				return;
 			}
@@ -805,7 +813,7 @@ void JKScanNtfs::ProcessAttributeList(
 
 			p1[Attribute->NameLength] = 0;
 
-			m_jkGui->ShowDebug(6,NULL,L"      AttributeList name = '%s'",p1);
+			jkGui->ShowDebug(6,NULL,L"      AttributeList name = '%s'",p1);
 
 			free(p1);
 		}
@@ -832,7 +840,7 @@ void JKScanNtfs::ProcessAttributeList(
 
 		if (Fragment == NULL)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"      Error: Inode %I64u is an extension of Inode %I64u, but does not exist (outside the MFT).",
+			jkGui->ShowDebug(6,NULL,L"      Error: Inode %I64u is an extension of Inode %I64u, but does not exist (outside the MFT).",
 					RefInode,InodeData->Inode);
 
 			continue;
@@ -843,7 +851,7 @@ void JKScanNtfs::ProcessAttributeList(
 
 		if (Buffer2 == NULL)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+			jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 		
 			return;
 		}
@@ -859,9 +867,9 @@ void JKScanNtfs::ProcessAttributeList(
 
 		if ((Result == 0) || (BytesRead != DiskInfo->BytesPerMftRecord))
 		{
-			SystemErrorStr(GetLastError(),s1,BUFSIZ);
+			m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 		
-			m_jkGui->ShowDebug(2,NULL,L"      Error while reading Inode %I64u: %s",RefInode,s1);
+			jkGui->ShowDebug(2,NULL,L"      Error while reading Inode %I64u: %s",RefInode,s1);
 
 			free(Buffer2);
 
@@ -871,7 +879,7 @@ void JKScanNtfs::ProcessAttributeList(
 		/* Fixup the raw data. */
 		if (FixupRawMftdata(Data,DiskInfo,Buffer2,DiskInfo->BytesPerMftRecord) == FALSE)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"The error occurred while processing Inode %I64u",RefInode);
+			jkGui->ShowDebug(2,NULL,L"The error occurred while processing Inode %I64u",RefInode);
 	
 			free(Buffer2);
 
@@ -883,7 +891,7 @@ void JKScanNtfs::ProcessAttributeList(
 
 		if ((FileRecordHeader->Flags & 1) != 1)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"      Referenced Inode %I64u is not in use.",RefInode);
+			jkGui->ShowDebug(6,NULL,L"      Referenced Inode %I64u is not in use.",RefInode);
 		
 			free(Buffer2);
 
@@ -896,7 +904,7 @@ void JKScanNtfs::ProcessAttributeList(
 
 		if (InodeData->Inode != BaseInode)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"      Warning: Inode %I64u is an extension of Inode %I64u, but thinks it's an extension of Inode %I64u.",
+			jkGui->ShowDebug(6,NULL,L"      Warning: Inode %I64u is an extension of Inode %I64u, but thinks it's an extension of Inode %I64u.",
 					RefInode,InodeData->Inode,BaseInode);
 		
 			free(Buffer2);
@@ -905,14 +913,14 @@ void JKScanNtfs::ProcessAttributeList(
 		}
 
 		/* Process the list of attributes in the Inode, by recursively calling the ProcessAttributes() subroutine. */
-		m_jkGui->ShowDebug(6,NULL,L"      Processing Inode %I64u Instance %u",RefInode, Attribute->Instance);
+		jkGui->ShowDebug(6,NULL,L"      Processing Inode %I64u Instance %u",RefInode, Attribute->Instance);
 
 		Result = ProcessAttributes(Data,DiskInfo,InodeData,
 				&Buffer2[FileRecordHeader->AttributeOffset],
 				DiskInfo->BytesPerMftRecord - FileRecordHeader->AttributeOffset,
 				Attribute->Instance,Depth + 1);
 
-		m_jkGui->ShowDebug(6,NULL,L"      Finished processing Inode %I64u Instance %u",RefInode, Attribute->Instance);
+		jkGui->ShowDebug(6,NULL,L"      Finished processing Inode %I64u Instance %u",RefInode, Attribute->Instance);
 
 		free(Buffer2);
 	}
@@ -942,6 +950,8 @@ BOOL JKScanNtfs::ProcessAttributes(
 
 	WCHAR *p1;
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* Walk through all the attributes and gather information. AttributeLists are
 	skipped and interpreted later. */
 	for (AttributeOffset = 0; AttributeOffset < BufLength; AttributeOffset = AttributeOffset + Attribute->Length)
@@ -956,11 +966,11 @@ BOOL JKScanNtfs::ProcessAttributes(
 			(Attribute->Length < 3) ||
 			(AttributeOffset + Attribute->Length > BufLength))
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: attribute in Inode %I64u is bigger than the data, the MFT may be corrupt.", InodeData->Inode);
-			m_jkGui->ShowDebug(2,NULL,L"  BufLength=%I64u, AttributeOffset=%lu, AttributeLength=%u(%X)",
+			jkGui->ShowDebug(2,NULL,L"Error: attribute in Inode %I64u is bigger than the data, the MFT may be corrupt.", InodeData->Inode);
+			jkGui->ShowDebug(2,NULL,L"  BufLength=%I64u, AttributeOffset=%lu, AttributeLength=%u(%X)",
 						BufLength,AttributeOffset,Attribute->Length,Attribute->Length);
 
-			ShowHex(Data,Buffer,BufLength);
+			m_jkLib->ShowHex(Data,Buffer,BufLength);
 
 			return(FALSE);
 		}
@@ -974,7 +984,7 @@ BOOL JKScanNtfs::ProcessAttributes(
 		if ((Instance != 65535) && (Instance != Attribute->AttributeNumber)) continue;
 
 		/* Show debug message. */
-		m_jkGui->ShowDebug(6,NULL,L"  Attribute %u: %s",Attribute->AttributeNumber, StreamTypeNames(Attribute->AttributeType));
+		jkGui->ShowDebug(6,NULL,L"  Attribute %u: %s",Attribute->AttributeNumber, StreamTypeNames(Attribute->AttributeType));
 
 		if (Attribute->Nonresident == 0)
 		{
@@ -995,7 +1005,7 @@ BOOL JKScanNtfs::ProcessAttributes(
 
 					if (p1 == NULL)
 					{
-						m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+						jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 					
 						return(FALSE);
 					}
@@ -1019,7 +1029,7 @@ BOOL JKScanNtfs::ProcessAttributes(
 						{
 							InodeData->ShortFilename = p1;
 						
-							m_jkGui->ShowDebug(6,NULL,L"    Short filename = '%s'",p1);
+							jkGui->ShowDebug(6,NULL,L"    Short filename = '%s'",p1);
 						}
 					}
 					else
@@ -1032,7 +1042,7 @@ BOOL JKScanNtfs::ProcessAttributes(
 						{
 							InodeData->LongFilename = p1;
 
-							m_jkGui->ShowDebug(6,NULL,L"    Long filename = '%s'",p1);
+							jkGui->ShowDebug(6,NULL,L"    Long filename = '%s'",p1);
 						}
 					}
 				}
@@ -1074,7 +1084,7 @@ BOOL JKScanNtfs::ProcessAttributes(
 
 				if (p1 == NULL)
 				{
-					m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+					jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 				
 					return(FALSE);
 				}
@@ -1123,7 +1133,7 @@ BOOL JKScanNtfs::ProcessAttributes(
 		if (*(ULONG *)Attribute == 0xFFFFFFFF) break;
 		if (Attribute->AttributeType != AttributeAttributeList) continue;
 
-		m_jkGui->ShowDebug(6,NULL,L"  Attribute %u: %s",Attribute->AttributeNumber, StreamTypeNames(Attribute->AttributeType));
+		jkGui->ShowDebug(6,NULL,L"  Attribute %u: %s",Attribute->AttributeNumber, StreamTypeNames(Attribute->AttributeType));
 
 		if (Attribute->Nonresident == 0)
 		{
@@ -1175,12 +1185,14 @@ BOOL JKScanNtfs::InterpretMftRecord(
 
 	int Result;
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* If the record is not in use then quietly exit. */
 	FileRecordHeader = (struct FILE_RECORD_HEADER *)Buffer;
 
 	if ((FileRecordHeader->Flags & 1) != 1)
 	{
-		m_jkGui->ShowDebug(6,NULL,L"Inode %I64u is not in use.",InodeNumber);
+		jkGui->ShowDebug(6,NULL,L"Inode %I64u is not in use.",InodeNumber);
 
 		return(FALSE);
 	}
@@ -1193,17 +1205,17 @@ BOOL JKScanNtfs::InterpretMftRecord(
 
 	if (BaseInode != 0)
 	{
-		m_jkGui->ShowDebug(6,NULL,L"Ignoring Inode %I64u, it's an extension of Inode %I64u", InodeNumber, BaseInode);
+		jkGui->ShowDebug(6,NULL,L"Ignoring Inode %I64u, it's an extension of Inode %I64u", InodeNumber, BaseInode);
 
 		return(TRUE);
 	}
 
-	m_jkGui->ShowDebug(6,NULL,L"Processing Inode %I64u...",InodeNumber);
+	jkGui->ShowDebug(6,NULL,L"Processing Inode %I64u...",InodeNumber);
 
 	/* Show a warning if the Flags have an unknown value. */
 	if ((FileRecordHeader->Flags & 252) != 0)
 	{
-		m_jkGui->ShowDebug(6,NULL,L"  Inode %I64u has Flags = %u",InodeNumber,FileRecordHeader->Flags);
+		jkGui->ShowDebug(6,NULL,L"  Inode %I64u has Flags = %u",InodeNumber,FileRecordHeader->Flags);
 	}
 
 	/* I think the MFTRecordNumber should always be the InodeNumber, but it's an XP
@@ -1211,14 +1223,14 @@ BOOL JKScanNtfs::InterpretMftRecord(
 	Note: why is the MFTRecordNumber only 32 bit? Inode numbers are 48 bit. */
 	if (FileRecordHeader->MFTRecordNumber != InodeNumber)
 	{
-		m_jkGui->ShowDebug(6,NULL,L"  Warning: Inode %I64u contains a different MFTRecordNumber %lu",
+		jkGui->ShowDebug(6,NULL,L"  Warning: Inode %I64u contains a different MFTRecordNumber %lu",
 				InodeNumber,FileRecordHeader->MFTRecordNumber);
 	}
 
 	/* Sanity check. */
 	if (FileRecordHeader->AttributeOffset >= BufLength)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: attributes in Inode %I64u are outside the FILE record, the MFT may be corrupt.",
+		jkGui->ShowDebug(2,NULL,L"Error: attributes in Inode %I64u are outside the FILE record, the MFT may be corrupt.",
 				InodeNumber);
 
 		return(FALSE);
@@ -1226,7 +1238,7 @@ BOOL JKScanNtfs::InterpretMftRecord(
 
 	if (FileRecordHeader->BytesInUse > BufLength)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: in Inode %I64u the record is bigger than the size of the buffer, the MFT may be corrupt.",
+		jkGui->ShowDebug(2,NULL,L"Error: in Inode %I64u the record is bigger than the size of the buffer, the MFT may be corrupt.",
 				InodeNumber);
 	
 		return(FALSE);
@@ -1279,7 +1291,7 @@ BOOL JKScanNtfs::InterpretMftRecord(
 
 		if (Item == NULL)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+			jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 
 			if (InodeData.LongFilename != NULL) free(InodeData.LongFilename);
 			if (InodeData.ShortFilename != NULL) free(InodeData.ShortFilename);
@@ -1331,7 +1343,7 @@ BOOL JKScanNtfs::InterpretMftRecord(
 
 		if (Stream != NULL) Data->CountAllClusters = Data->CountAllClusters + Stream->Clusters;
 
-		if (FragmentCount(Item) > 1)
+		if (m_jkLib->FragmentCount(Item) > 1)
 		{
 			Data->CountFragmentedItems = Data->CountFragmentedItems + 1;
 			Data->CountFragmentedBytes = Data->CountFragmentedBytes + InodeData.Bytes;
@@ -1340,7 +1352,7 @@ BOOL JKScanNtfs::InterpretMftRecord(
 		}
 
 		/* Add the item record to the sorted item tree in memory. */
-		TreeInsert(Data,Item);
+		m_jkLib->TreeInsert(Data,Item);
 
 		/* Also add the item to the array that is used to construct the full pathnames.
 		Note: if the array already contains an entry, and the new item has a shorter
@@ -1358,9 +1370,9 @@ BOOL JKScanNtfs::InterpretMftRecord(
 		}
 
 		/* Draw the item on the screen. */
-		m_jkGui->ShowAnalyze(Data,Item);
+		jkGui->ShowAnalyze(Data,Item);
 //		if (*Data->RedrawScreen == NO) {
-			ColorizeItem(Data,Item,0,0,NO);
+			m_jkLib->ColorizeItem(Data,Item,0,0,NO);
 //		} else {
 //			m_jkGui->ShowDiskmap(Data);
 //		}
@@ -1430,12 +1442,14 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 	ULONG64 u1;
 
+	JKDefragGui *jkGui = JKDefragGui::getInstance();
+
 	/* Read the boot block from the disk. */
 	Buffer = (BYTE *)malloc(MFTBUFFERSIZE);
 
 	if (Buffer == NULL)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+		jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 	
 		return(FALSE);
 	}
@@ -1448,9 +1462,9 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 	if ((Result == 0) || (BytesRead != 512))
 	{
-		SystemErrorStr(GetLastError(),s1,BUFSIZ);
+		m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-		m_jkGui->ShowDebug(2,NULL,L"Error while reading bootblock: %s",s1);
+		jkGui->ShowDebug(2,NULL,L"Error while reading bootblock: %s",s1);
 
 		free(Buffer);
 
@@ -1460,7 +1474,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 	/* Test if the boot block is an NTFS boot block. */
 	if (*(ULONGLONG *)&Buffer[3] != 0x202020205346544E)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"This is not an NTFS disk (different cookie).");
+		jkGui->ShowDebug(2,NULL,L"This is not an NTFS disk (different cookie).");
 
 		free(Buffer);
 
@@ -1496,19 +1510,19 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 		Data->TotalClusters = DiskInfo.TotalSectors / DiskInfo.SectorsPerCluster;
 	}
 
-	m_jkGui->ShowDebug(0,NULL,L"This is an NTFS disk.");
-	m_jkGui->ShowDebug(2,NULL,L"  Disk cookie: %I64X",*(ULONGLONG *)&Buffer[3]);
-	m_jkGui->ShowDebug(2,NULL,L"  BytesPerSector: %I64u",DiskInfo.BytesPerSector);
-	m_jkGui->ShowDebug(2,NULL,L"  TotalSectors: %I64u",DiskInfo.TotalSectors);
-	m_jkGui->ShowDebug(2,NULL,L"  SectorsPerCluster: %I64u",DiskInfo.SectorsPerCluster);
-	m_jkGui->ShowDebug(2,NULL,L"  SectorsPerTrack: %lu",*(USHORT *)&Buffer[24]);
-	m_jkGui->ShowDebug(2,NULL,L"  NumberOfHeads: %lu",*(USHORT *)&Buffer[26]);
-	m_jkGui->ShowDebug(2,NULL,L"  MftStartLcn: %I64u",DiskInfo.MftStartLcn);
-	m_jkGui->ShowDebug(2,NULL,L"  Mft2StartLcn: %I64u",DiskInfo.Mft2StartLcn);
-	m_jkGui->ShowDebug(2,NULL,L"  BytesPerMftRecord: %I64u",DiskInfo.BytesPerMftRecord);
-	m_jkGui->ShowDebug(2,NULL,L"  ClustersPerIndexRecord: %I64u",DiskInfo.ClustersPerIndexRecord);
-	m_jkGui->ShowDebug(2,NULL,L"  MediaType: %X",Buffer[21]);
-	m_jkGui->ShowDebug(2,NULL,L"  VolumeSerialNumber: %I64X",*(ULONGLONG *)&Buffer[72]);
+	jkGui->ShowDebug(0,NULL,L"This is an NTFS disk.");
+	jkGui->ShowDebug(2,NULL,L"  Disk cookie: %I64X",*(ULONGLONG *)&Buffer[3]);
+	jkGui->ShowDebug(2,NULL,L"  BytesPerSector: %I64u",DiskInfo.BytesPerSector);
+	jkGui->ShowDebug(2,NULL,L"  TotalSectors: %I64u",DiskInfo.TotalSectors);
+	jkGui->ShowDebug(2,NULL,L"  SectorsPerCluster: %I64u",DiskInfo.SectorsPerCluster);
+	jkGui->ShowDebug(2,NULL,L"  SectorsPerTrack: %lu",*(USHORT *)&Buffer[24]);
+	jkGui->ShowDebug(2,NULL,L"  NumberOfHeads: %lu",*(USHORT *)&Buffer[26]);
+	jkGui->ShowDebug(2,NULL,L"  MftStartLcn: %I64u",DiskInfo.MftStartLcn);
+	jkGui->ShowDebug(2,NULL,L"  Mft2StartLcn: %I64u",DiskInfo.Mft2StartLcn);
+	jkGui->ShowDebug(2,NULL,L"  BytesPerMftRecord: %I64u",DiskInfo.BytesPerMftRecord);
+	jkGui->ShowDebug(2,NULL,L"  ClustersPerIndexRecord: %I64u",DiskInfo.ClustersPerIndexRecord);
+	jkGui->ShowDebug(2,NULL,L"  MediaType: %X",Buffer[21]);
+	jkGui->ShowDebug(2,NULL,L"  VolumeSerialNumber: %I64X",*(ULONGLONG *)&Buffer[72]);
 
 	/* Calculate the size of first 16 Inodes in the MFT. The Microsoft defragmentation
 	API cannot move these inodes. */
@@ -1524,9 +1538,9 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 	if ((Result == 0) || (BytesRead != DiskInfo.BytesPerMftRecord))
 	{
-		SystemErrorStr(GetLastError(),s1,BUFSIZ);
+		m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 	
-		m_jkGui->ShowDebug(2,NULL,L"Error while reading first MFT record: %s",s1);
+		jkGui->ShowDebug(2,NULL,L"Error while reading first MFT record: %s",s1);
 
 		free(Buffer);
 
@@ -1555,23 +1569,23 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 		(MftDataFragments == NULL) || (MftDataBytes == 0) ||
 		(MftBitmapFragments == NULL) || (MftBitmapBytes == 0))
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Fatal error, cannot process this disk.");
+		jkGui->ShowDebug(2,NULL,L"Fatal error, cannot process this disk.");
 	
 		free(Buffer);
 
-		DeleteItemTree(Data->ItemTree);
+		m_jkLib->DeleteItemTree(Data->ItemTree);
 
 		Data->ItemTree = NULL;
 
 		return(FALSE);
 	}
 
-	m_jkGui->ShowDebug(6,NULL,L"MftDataBytes = %I64u, MftBitmapBytes = %I64u", MftDataBytes,MftBitmapBytes);
+	jkGui->ShowDebug(6,NULL,L"MftDataBytes = %I64u, MftBitmapBytes = %I64u", MftDataBytes,MftBitmapBytes);
 
 	/* Read the complete $MFT::$BITMAP into memory.
 	Note: The allocated size of the bitmap is a multiple of the cluster size. This
 	is only to make it easier to read the fragments, the extra bytes are not used. */
-	m_jkGui->ShowDebug(6,NULL,L"Reading $MFT::$BITMAP into memory");
+	jkGui->ShowDebug(6,NULL,L"Reading $MFT::$BITMAP into memory");
 
 	Vcn = 0;
 	MaxMftBitmapBytes = 0;
@@ -1593,11 +1607,11 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 	if (MftBitmap == NULL)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+		jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 
 		free(Buffer);
 
-		DeleteItemTree(Data->ItemTree);
+		m_jkLib->DeleteItemTree(Data->ItemTree);
 
 		Data->ItemTree = NULL;
 
@@ -1609,13 +1623,13 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 	Vcn = 0;
 	RealVcn = 0;
 
-	m_jkGui->ShowDebug(6,NULL,L"Reading $MFT::$BITMAP into memory");
+	jkGui->ShowDebug(6,NULL,L"Reading $MFT::$BITMAP into memory");
 
 	for (Fragment = MftBitmapFragments; Fragment != NULL; Fragment = Fragment->Next)
 	{
 		if (Fragment->Lcn != VIRTUALFRAGMENT)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"  Extent Lcn=%I64u, RealVcn=%I64u, Size=%I64u",
+			jkGui->ShowDebug(6,NULL,L"  Extent Lcn=%I64u, RealVcn=%I64u, Size=%I64u",
 				Fragment->Lcn,RealVcn,Fragment->NextVcn - Vcn);
 
 			Trans.QuadPart = Fragment->Lcn * DiskInfo.BytesPerSector * DiskInfo.SectorsPerCluster;
@@ -1624,7 +1638,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 			gOverlapped.OffsetHigh = Trans.HighPart;
 			gOverlapped.hEvent     = NULL;
 
-			m_jkGui->ShowDebug(6,NULL,L"    Reading %I64u clusters (%I64u bytes) from LCN=%I64u",
+			jkGui->ShowDebug(6,NULL,L"    Reading %I64u clusters (%I64u bytes) from LCN=%I64u",
 				Fragment->NextVcn - Vcn,
 				(Fragment->NextVcn - Vcn) * DiskInfo.BytesPerSector * DiskInfo.SectorsPerCluster,
 				Fragment->Lcn);
@@ -1636,14 +1650,14 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 			if ((Result == 0) || (BytesRead != (Fragment->NextVcn - Vcn) * DiskInfo.BytesPerSector * DiskInfo.SectorsPerCluster))
 			{
-				SystemErrorStr(GetLastError(),s1,BUFSIZ);
+				m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-				m_jkGui->ShowDebug(2,NULL,L"  %s",s1);
+				jkGui->ShowDebug(2,NULL,L"  %s",s1);
 
 				free(MftBitmap);
 				free(Buffer);
 
-				DeleteItemTree(Data->ItemTree);
+				m_jkLib->DeleteItemTree(Data->ItemTree);
 
 				Data->ItemTree = NULL;
 
@@ -1670,11 +1684,11 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 	if (InodeArray == NULL)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
+		jkGui->ShowDebug(2,NULL,L"Error: malloc() returned NULL.");
 
 		free(Buffer);
 
-		DeleteItemTree(Data->ItemTree);
+		m_jkLib->DeleteItemTree(Data->ItemTree);
 
 		Data->ItemTree = NULL;
 
@@ -1716,7 +1730,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 		/* Ignore the Inode if the bitmap says it's not in use. */
 		if ((MftBitmap[InodeNumber >> 3] & BitmapMasks[InodeNumber % 8]) == 0)
 		{
-			m_jkGui->ShowDebug(6,NULL,L"Inode %I64u is not in use.",InodeNumber);
+			jkGui->ShowDebug(6,NULL,L"Inode %I64u is not in use.",InodeNumber);
 
 			continue;
 		}
@@ -1728,7 +1742,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 		if (InodeNumber >= BlockEnd)
 		{
 			/* Slow the program down to the percentage that was specified on the command line. */
-			SlowDown(Data);
+			m_jkLib->SlowDown(Data);
 
 			BlockStart = InodeNumber;
 			BlockEnd = BlockStart + MFTBUFFERSIZE / DiskInfo.BytesPerMftRecord;
@@ -1745,7 +1759,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 				do
 				{
-					m_jkGui->ShowDebug(6,NULL,L"Skipping to next extent");
+					jkGui->ShowDebug(6,NULL,L"Skipping to next extent");
 
 					if (Fragment->Lcn != VIRTUALFRAGMENT) RealVcn = RealVcn + Fragment->NextVcn - Vcn;
 
@@ -1755,7 +1769,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 					if (Fragment == NULL) break;
 				} while (Fragment->Lcn == VIRTUALFRAGMENT);
 
-				m_jkGui->ShowDebug(6,NULL,L"  Extent Lcn=%I64u, RealVcn=%I64u, Size=%I64u",
+				jkGui->ShowDebug(6,NULL,L"  Extent Lcn=%I64u, RealVcn=%I64u, Size=%I64u",
 					Fragment->Lcn,RealVcn,Fragment->NextVcn - Vcn);
 			}
 			if (Fragment == NULL) break;
@@ -1768,7 +1782,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 			gOverlapped.OffsetHigh = Trans.HighPart;
 			gOverlapped.hEvent     = NULL;
 
-			m_jkGui->ShowDebug(6,NULL,L"Reading block of %I64u Inodes from MFT into memory, %u bytes from LCN=%I64u",
+			jkGui->ShowDebug(6,NULL,L"Reading block of %I64u Inodes from MFT into memory, %u bytes from LCN=%I64u",
 				BlockEnd - BlockStart,(DWORD)((BlockEnd - BlockStart) * DiskInfo.BytesPerMftRecord),
 				Trans.QuadPart / (DiskInfo.BytesPerSector * DiskInfo.SectorsPerCluster));
 
@@ -1778,14 +1792,14 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 			if ((Result == 0) || (BytesRead != (BlockEnd - BlockStart) * DiskInfo.BytesPerMftRecord))
 			{
-				SystemErrorStr(GetLastError(),s1,BUFSIZ);
+				m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
 
-				m_jkGui->ShowDebug(2,NULL,L"Error while reading Inodes %I64u to %I64u: %s",InodeNumber,BlockEnd-1,s1);
+				jkGui->ShowDebug(2,NULL,L"Error while reading Inodes %I64u to %I64u: %s",InodeNumber,BlockEnd-1,s1);
 
 				free(Buffer);
 				free(InodeArray);
 
-				DeleteItemTree(Data->ItemTree);
+				m_jkLib->DeleteItemTree(Data->ItemTree);
 
 				Data->ItemTree = NULL;
 
@@ -1797,7 +1811,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 		if (FixupRawMftdata(Data,&DiskInfo,&Buffer[(InodeNumber - BlockStart) * DiskInfo.BytesPerMftRecord],
 			DiskInfo.BytesPerMftRecord) == FALSE)
 		{
-			m_jkGui->ShowDebug(2,NULL,L"The error occurred while processing Inode %I64u (max %I64u)",
+			jkGui->ShowDebug(2,NULL,L"The error occurred while processing Inode %I64u (max %I64u)",
 					InodeNumber,MaxInode);
 		
 			continue;
@@ -1816,7 +1830,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 
 	if (EndTime > StartTime)
 	{
-		m_jkGui->ShowDebug(2,NULL,L"  Analysis speed: %I64u items per second",
+		jkGui->ShowDebug(2,NULL,L"  Analysis speed: %I64u items per second",
 			MaxInode * 1000 / (EndTime - StartTime));
 	}
 
@@ -1828,7 +1842,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 	{
 		free(InodeArray);
 
-		DeleteItemTree(Data->ItemTree);
+		m_jkLib->DeleteItemTree(Data->ItemTree);
 
 		Data->ItemTree = NULL;
 
@@ -1836,7 +1850,7 @@ BOOL JKScanNtfs::AnalyzeNtfsVolume(struct DefragDataStruct *Data)
 	}
 
 	/* Setup the ParentDirectory in all the items with the info in the InodeArray. */
-	for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item))
+	for (Item = m_jkLib->TreeSmallest(Data->ItemTree); Item != NULL; Item = m_jkLib->TreeNext(Item))
 	{
 		Item->ParentDirectory = InodeArray[Item->ParentInode];
 

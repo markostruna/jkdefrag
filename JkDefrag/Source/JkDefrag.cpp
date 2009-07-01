@@ -28,7 +28,9 @@ http://www.kessels.com/
 
 JKDefragStruct *jkStruct = NULL;
 JKDefragLog *jkLog = NULL;
+
 static JKDefragGui *m_jkGui = JKDefragGui::getInstance();
+static JKDefragLib *m_jkLib = JKDefragLib::getInstance();
 
 #ifdef _DEBUG
 /* Write a crash report to the log.
@@ -87,17 +89,24 @@ LONG __stdcall CrashReport(EXCEPTION_POINTERS *ExceptionInfo)
 	case DBG_COMMAND_EXCEPTION              : strcpy_s(s1,BUFSIZ,"DBG_COMMAND_EXCEPTION (Debugger command communication exception)"); break;
 	default                                 : strcpy_s(s1,BUFSIZ,"(unknown exception)");
 	}
+
 	jkLog->LogMessage(L"  Exception: %S",s1);
 
 	/* Try to show the linenumber of the sourcefile. */
 	SymSetOptions(SymGetOptions() || SYMOPT_LOAD_LINES);
 	Result = SymInitialize(GetCurrentProcess(),NULL,TRUE);
-	if (Result == FALSE) {
-		SystemErrorStr(GetLastError(),s2,BUFSIZ);
+
+	if (Result == FALSE)
+	{
+		m_jkLib->SystemErrorStr(GetLastError(),s2,BUFSIZ);
+
 		jkLog->LogMessage(L"  Failed to initialize SymInitialize(): %s",s2);
+
 		return(EXCEPTION_EXECUTE_HANDLER);
 	}
+
 	ZeroMemory(&StackFrame,sizeof(StackFrame));
+
 #ifdef _M_IX86
 	ImageType = IMAGE_FILE_MACHINE_I386;
 	StackFrame.AddrPC.Offset = ExceptionInfo->ContextRecord->Eip;
@@ -157,8 +166,12 @@ LONG __stdcall CrashReport(EXCEPTION_POINTERS *ExceptionInfo)
 }
 #endif
 
-/* The main thread that performs all the work. Interpret the commandline
-parameters and call the defragger library. */
+/*
+
+The main thread that performs all the work. Interpret the commandline
+parameters and call the defragger library.
+
+*/
 DWORD WINAPI DefragThread(LPVOID)
 {
 	int QuitOnFinish;
@@ -444,7 +457,7 @@ DWORD WINAPI DefragThread(LPVOID)
 					continue;
 				}
 
-				Excludes = AddArrayString(Excludes,argv[i]);
+				Excludes = m_jkLib->AddArrayString(Excludes,argv[i]);
 
 				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-e' accepted, added '%s' to the excludes",argv[i]);
 
@@ -453,7 +466,7 @@ DWORD WINAPI DefragThread(LPVOID)
 
 			if ((wcsncmp(argv[i],L"-e",2) == 0) && (wcslen(argv[i]) >= 3))
 			{
-				Excludes = AddArrayString(Excludes,&argv[i][2]);
+				Excludes = m_jkLib->AddArrayString(Excludes,&argv[i][2]);
 
 				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-e' accepted, added '%s' to the excludes",&argv[i][2]);
 
@@ -471,7 +484,7 @@ DWORD WINAPI DefragThread(LPVOID)
 					continue;
 				}
 
-				SpaceHogs = AddArrayString(SpaceHogs,argv[i]);
+				SpaceHogs = m_jkLib->AddArrayString(SpaceHogs,argv[i]);
 
 				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-u' accepted, added '%s' to the spacehogs",argv[i]);
 
@@ -480,7 +493,7 @@ DWORD WINAPI DefragThread(LPVOID)
 
 			if ((wcsncmp(argv[i],L"-u",2) == 0) && (wcslen(argv[i]) >= 3))
 			{
-				SpaceHogs = AddArrayString(SpaceHogs,&argv[i][2]);
+				SpaceHogs = m_jkLib->AddArrayString(SpaceHogs,&argv[i][2]);
 
 				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-u' accepted, added '%s' to the spacehogs",&argv[i][2]);
 
@@ -527,7 +540,7 @@ DWORD WINAPI DefragThread(LPVOID)
 			if (*argv[i] == '-') continue;
 			if (*argv[i] == '\0') continue;
 
-			RunJkDefrag(argv[i],OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
+			m_jkLib->RunJkDefrag(argv[i],OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
 				/*&JKDefragGui::getInstance()->RedrawScreen,*/NULL);
 
 			DoAllVolumes = NO;
@@ -537,7 +550,7 @@ DWORD WINAPI DefragThread(LPVOID)
 	/* If no paths are specified on the commandline then defrag all fixed harddisks. */
 	if ((DoAllVolumes == YES) && (IamRunning == RUNNING))
 	{
-		RunJkDefrag(NULL,OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
+		m_jkLib->RunJkDefrag(NULL,OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
 			/*&JKDefragGui::getInstance()->RedrawScreen,*/NULL);
 	}
 
@@ -565,7 +578,8 @@ int AlreadyRunning(void)
 
 	if (Snapshot == INVALID_HANDLE_VALUE)
 	{
-		SystemErrorStr(GetLastError(),s1,BUFSIZ);
+		m_jkLib->SystemErrorStr(GetLastError(),s1,BUFSIZ);
+
 		swprintf_s(s2,BUFSIZ,L"Cannot get process snapshot: %s",s1);
 
 		m_jkGui->ShowDebug(0,NULL,s2);
@@ -669,7 +683,7 @@ int __stdcall WinMain(
 	/* If the defragger is still running then ask & wait for it to stop. */
 	IamRunning = STOPPED;
 
-	StopJkDefrag(&Running,0);
+	m_jkLib->StopJkDefrag(&Running,0);
 
 	delete jkStruct;
 	delete jkLog;
