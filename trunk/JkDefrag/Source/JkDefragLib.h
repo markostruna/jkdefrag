@@ -176,6 +176,15 @@ struct DefragDataStruct
 	WCHAR **DebugMsg;
 };
 
+
+class JKDefragLib
+{
+public:
+	JKDefragLib();
+	~JKDefragLib();
+
+	static JKDefragLib *getInstance();
+
 /* Run the defragger/optimizer.
 
 The parameters:
@@ -270,15 +279,17 @@ DebugMsg:
 */
 
 __declspec(dllexport) void              RunJkDefrag(WCHAR *Path, int Mode, int Speed, double FreeSpace, WCHAR **Excludes, WCHAR **SpaceHogs, int *Running,
-//									   int *RedrawScreen,
-									    WCHAR **DebugMsg);
+													/*int *RedrawScreen, */WCHAR **DebugMsg);
 
-/* Stop the defragger. Wait for a maximum of TimeOut milliseconds for the
+/*
+
+Stop the defragger. Wait for a maximum of TimeOut milliseconds for the
 defragger to stop. If TimeOut is zero then wait indefinitely. If TimeOut is
 negative then immediately return without waiting.
 Note: The "Running" variable must be the same as what was given to the
-RunJkDefrag() subroutine. */
+RunJkDefrag() subroutine.
 
+*/
 __declspec(dllexport) void              StopJkDefrag(int *Running, int TimeOut);
 
 /* Other exported functions that might be useful in programs that use JkDefrag. */
@@ -316,5 +327,113 @@ __declspec(dllexport) void               ColorizeItem(struct DefragDataStruct *D
 __declspec(dllexport) void               ShowDiskmap(struct DefragDataStruct *Data);
 */
 __declspec(dllexport) void               CallShowStatus(struct DefragDataStruct *Data, int Phase, int Zone);
+
+private:
+	WCHAR LowerCase(WCHAR c);
+
+	void AppendToShortPath(struct ItemStruct *Item, WCHAR *Path, size_t Length);
+	void AppendToLongPath(struct ItemStruct *Item, WCHAR *Path, size_t Length);
+	ULONG64 FindFragmentBegin(struct ItemStruct *Item, ULONG64 Lcn);
+
+	struct ItemStruct *FindItemAtLcn(struct DefragDataStruct *Data, ULONG64 Lcn);
+	HANDLE OpenItemHandle(struct DefragDataStruct *Data, struct ItemStruct *Item);
+	int GetFragments(struct DefragDataStruct *Data, struct ItemStruct *Item, HANDLE FileHandle);
+
+	int FindGap(struct DefragDataStruct *Data,
+		ULONG64 MinimumLcn,          /* Gap must be at or above this LCN. */
+		ULONG64 MaximumLcn,          /* Gap must be below this LCN. */
+		ULONG64 MinimumSize,         /* Gap must be at least this big. */
+		int MustFit,                 /* YES: gap must be at least MinimumSize. */
+		int FindHighestGap,          /* YES: return the last gap that fits. */
+		ULONG64 *BeginLcn,           /* Result, LCN of begin of cluster. */
+		ULONG64 *EndLcn,             /* Result, LCN of end of cluster. */
+		BOOL IgnoreMftExcludes);
+
+	void CalculateZones(struct DefragDataStruct *Data);
+
+	DWORD MoveItem1(struct DefragDataStruct *Data,
+		HANDLE FileHandle,
+		struct ItemStruct *Item,
+		ULONG64 NewLcn,                   /* Where to move to. */
+		ULONG64 Offset,                   /* Number of first cluster to be moved. */
+		ULONG64 Size);                    /* Number of clusters to be moved. */
+
+	DWORD MoveItem2(struct DefragDataStruct *Data,
+		HANDLE FileHandle,
+		struct ItemStruct *Item,
+		ULONG64 NewLcn,                /* Where to move to. */
+		ULONG64 Offset,                /* Number of first cluster to be moved. */
+		ULONG64 Size);                 /* Number of clusters to be moved. */
+
+	int MoveItem3(struct DefragDataStruct *Data,
+		struct ItemStruct *Item,
+		HANDLE FileHandle,
+		ULONG64 NewLcn,          /* Where to move to. */
+		ULONG64 Offset,          /* Number of first cluster to be moved. */
+		ULONG64 Size,            /* Number of clusters to be moved. */
+		int Strategy);            /* 0: move in one part, 1: move individual fragments. */
+
+	int MoveItem4(struct DefragDataStruct *Data,
+		struct ItemStruct *Item,
+		HANDLE FileHandle,
+		ULONG64 NewLcn,                                   /* Where to move to. */
+		ULONG64 Offset,                /* Number of first cluster to be moved. */
+		ULONG64 Size,                       /* Number of clusters to be moved. */
+		int Direction);                          /* 0: move up, 1: move down. */
+
+	int MoveItem(struct DefragDataStruct *Data,
+		struct ItemStruct *Item,
+		ULONG64 NewLcn,                                   /* Where to move to. */
+		ULONG64 Offset,                /* Number of first cluster to be moved. */
+		ULONG64 Size,                       /* Number of clusters to be moved. */
+		int Direction);                          /* 0: move up, 1: move down. */
+
+	struct ItemStruct *FindHighestItem(struct DefragDataStruct *Data,
+		ULONG64 ClusterStart,
+		ULONG64 ClusterEnd,
+		int Direction,
+		int Zone);
+
+	struct ItemStruct *FindBestItem(struct DefragDataStruct *Data,
+		ULONG64 ClusterStart,
+		ULONG64 ClusterEnd,
+		int Direction,
+		int Zone);
+
+	void CompareItems(struct DefragDataStruct *Data, struct ItemStruct *Item);
+
+	int  CompareItems(struct ItemStruct *Item1, struct ItemStruct *Item2, int SortField);
+
+	void ScanDir(struct DefragDataStruct *Data, WCHAR *Mask, struct ItemStruct *ParentDirectory);
+
+	void AnalyzeVolume(struct DefragDataStruct *Data);
+
+	void Fixup(struct DefragDataStruct *Data);
+
+	void Defragment(struct DefragDataStruct *Data);
+
+	void ForcedFill(struct DefragDataStruct *Data);
+
+	void Vacate(struct DefragDataStruct *Data, ULONG64 Lcn, ULONG64 Clusters, BOOL IgnoreMftExcludes);
+
+	void MoveMftToBeginOfDisk(struct DefragDataStruct *Data);
+	
+	void OptimizeVolume(struct DefragDataStruct *Data);
+
+	void OptimizeSort(struct DefragDataStruct *Data, int SortField);
+
+	void OptimizeUp(struct DefragDataStruct *Data);
+
+	void DefragOnePath(struct DefragDataStruct *Data, WCHAR *Path, int Mode);
+
+	void DefragMountpoints(struct DefragDataStruct *Data, WCHAR *MountPoint, int Mode);
+/*
+	JKScanFat   *m_jkScanFat;
+	JKScanNtfs  *m_jkScanNtfs;
+*/
+
+	// static member that is an instance of itself
+	static JKDefragLib *m_jkDefragLib;
+};
 
 #endif    /* Include guard */

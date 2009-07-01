@@ -138,7 +138,7 @@ private:
 	// static member that is an instance of itself
 	static JKScanFat *m_jkScanFat;
 
-	JKDefragGui *m_jkGui;
+	JKDefragLib *m_jkLib;
 };
 
 #endif

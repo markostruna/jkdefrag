@@ -16,6 +16,8 @@ public:
 protected:
 private:
 	WCHAR LogFile[MAX_PATH];
+
+	JKDefragLib *m_jkLib;
 };
 
 #endif

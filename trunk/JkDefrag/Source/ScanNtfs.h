@@ -434,7 +434,8 @@ private:
 	// static member that is an instance of itself
 	static JKScanNtfs *m_jkScanNtfs;
 
-	JKDefragGui *m_jkGui;
+//	JKDefragGui *m_jkGui;
+	JKDefragLib *m_jkLib;
 };
 
 #endif

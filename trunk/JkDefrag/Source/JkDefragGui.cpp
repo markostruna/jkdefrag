@@ -9,6 +9,8 @@ JKDefragGui *JKDefragGui::m_jkDefragGui = 0;
 
 JKDefragGui::JKDefragGui()
 {
+	m_jkLib = JKDefragLib::getInstance();
+
 	m_bmp = NULL;
 
 	jkStruct = new JKDefragStruct();
@@ -616,7 +618,7 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 			m_jkLog->LogMessage(L"- Average end-begin distance: %.0f clusters",Data->AverageDistance);
 		}
 
-		for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item))
+		for (Item = m_jkLib->TreeSmallest(Data->ItemTree); Item != NULL; Item = m_jkLib->TreeNext(Item))
 		{
 			if (Item->Unmovable != YES) continue;
 			if (Item->Exclude == YES) continue;
@@ -633,7 +635,7 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 			TotalBytes = 0;
 			TotalClusters = 0;
 
-			for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item))
+			for (Item = m_jkLib->TreeSmallest(Data->ItemTree); Item != NULL; Item = m_jkLib->TreeNext(Item))
 			{
 				if (Item->Unmovable != YES) continue;
 				if (Item->Exclude == YES) continue;
@@ -642,12 +644,12 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 					((_wcsicmp(Item->LongFilename,L"$BadClus") == 0) ||
 					(_wcsicmp(Item->LongFilename,L"$BadClus:$Bad:$DATA") == 0))) continue;
 
-				Fragments = FragmentCount(Item);
+				Fragments = m_jkLib->FragmentCount(Item);
 
 				if (Item->LongPath == NULL)
 				{
 					m_jkLog->LogMessage(L"  %9lu %11I64u %9I64u [at cluster %I64u]",Fragments,Item->Bytes,Item->Clusters,
-						GetItemLcn(Item));
+						m_jkLib->GetItemLcn(Item));
 				}
 				else
 				{
@@ -663,12 +665,12 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 			m_jkLog->LogMessage(L"  %9I64u %11I64u %9I64u Total",TotalFragments,TotalBytes,TotalClusters);
 		}
 
-		for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item))
+		for (Item = m_jkLib->TreeSmallest(Data->ItemTree); Item != NULL; Item = m_jkLib->TreeNext(Item))
 		{
 			if (Item->Exclude == YES) continue;
 			if ((Item->Directory == YES) && (Data->CannotMoveDirs > 20)) continue;
 
-			Fragments = FragmentCount(Item);
+			Fragments = m_jkLib->FragmentCount(Item);
 
 			if (Fragments <= 1) continue;
 
@@ -684,19 +686,19 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 			TotalBytes = 0;
 			TotalClusters = 0;
 
-			for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item))
+			for (Item = m_jkLib->TreeSmallest(Data->ItemTree); Item != NULL; Item = m_jkLib->TreeNext(Item))
 			{
 				if (Item->Exclude == YES) continue;
 				if ((Item->Directory == YES) && (Data->CannotMoveDirs > 20)) continue;
 
-				Fragments = FragmentCount(Item);
+				Fragments = m_jkLib->FragmentCount(Item);
 
 				if (Fragments <= 1) continue;
 
 				if (Item->LongPath == NULL)
 				{
 					m_jkLog->LogMessage(L"  %9lu %11I64u %9I64u [at cluster %I64u]",Fragments,Item->Bytes,Item->Clusters,
-						GetItemLcn(Item));
+						m_jkLib->GetItemLcn(Item));
 				}
 				else
 				{
@@ -714,7 +716,7 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 
 		LastLargest = 0;
 
-		for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item))
+		for (Item = m_jkLib->TreeSmallest(Data->ItemTree); Item != NULL; Item = m_jkLib->TreeNext(Item))
 		{
 			if ((Item->LongFilename != NULL) &&
 				((_wcsicmp(Item->LongFilename,L"$BadClus") == 0) ||
@@ -759,12 +761,12 @@ void JKDefragGui::ShowStatus(struct DefragDataStruct *Data)
 			{
 				if (LargestItems[i]->LongPath == NULL)
 				{
-					m_jkLog->LogMessage(L"  %9u %11I64u %9I64u [at cluster %I64u]",FragmentCount(LargestItems[i]),
-						LargestItems[i]->Bytes,LargestItems[i]->Clusters,GetItemLcn(LargestItems[i]));
+					m_jkLog->LogMessage(L"  %9u %11I64u %9I64u [at cluster %I64u]",m_jkLib->FragmentCount(LargestItems[i]),
+						LargestItems[i]->Bytes,LargestItems[i]->Clusters,m_jkLib->GetItemLcn(LargestItems[i]));
 				}
 				else
 				{
-					m_jkLog->LogMessage(L"  %9u %11I64u %9I64u %s",FragmentCount(LargestItems[i]),
+					m_jkLog->LogMessage(L"  %9u %11I64u %9I64u %s",m_jkLib->FragmentCount(LargestItems[i]),
 						LargestItems[i]->Bytes,LargestItems[i]->Clusters,LargestItems[i]->LongPath);
 				}
 			}
@@ -1013,11 +1015,7 @@ void JKDefragGui::OnPaint(HDC hdc)
 }
 
 /* Message handler. */
-LRESULT CALLBACK JKDefragGui::ProcessMessagefn(
-	HWND hWnd,
-	UINT Message,
-	WPARAM wParam,
-	LPARAM lParam)
+LRESULT CALLBACK JKDefragGui::ProcessMessagefn(HWND hWnd, UINT Message, WPARAM wParam, LPARAM lParam)
 {
 	switch(Message)
 	{
@@ -1194,37 +1192,53 @@ void JKDefragGui::FillSquares( int clusterStartSquareNum, int clusterEndSquareNu
 	}
 }
 
-/* Show a map on the screen of all the clusters on disk. The map shows
+/*
+
+Show a map on the screen of all the clusters on disk. The map shows
 which clusters are free and which are in use.
 The Data->RedrawScreen flag controls redrawing of the screen. It is set
 to "2" (busy) when the subroutine starts. If another thread changes it to
 "1" (request) while the subroutine is busy then it will immediately exit
 without completing the redraw. When redrawing is completely finished the
-flag is set to "0" (no). */
+flag is set to "0" (no).
+
+*/
 void JKDefragGui::ShowDiskmap(struct DefragDataStruct *Data)
 {
 	struct ItemStruct *Item;
+
 	STARTING_LCN_INPUT_BUFFER BitmapParam;
-	struct {
+
+	struct
+	{
 		ULONG64 StartingLcn;
 		ULONG64 BitmapSize;
+
 		BYTE Buffer[65536];               /* Most efficient if binary multiple. */
 	} BitmapData;
+
 	ULONG64 Lcn;
 	ULONG64 ClusterStart;
+
 	DWORD ErrorCode;
+
 	int Index;
 	int IndexMax;
+
 	BYTE Mask;
+
 	int InUse;
 	int PrevInUse;
+
 	DWORD w;
+
 	int i;
 
 //	*Data->RedrawScreen = 2;                       /* Set the flag to "busy". */
 
 	/* Exit if the library is not processing a disk yet. */
-	if (Data->Disk.VolumeHandle == NULL) {
+	if (Data->Disk.VolumeHandle == NULL)
+	{
 //		*Data->RedrawScreen = 0;                       /* Set the flag to "no". */
 		return;
 	}
@@ -1236,20 +1250,28 @@ void JKDefragGui::ShowDiskmap(struct DefragDataStruct *Data)
 	Lcn = 0;
 	ClusterStart = 0;
 	PrevInUse = 1;
-	do {
+
+	do
+	{
 		if (*Data->Running != RUNNING) break;
 //		if (*Data->RedrawScreen != 2) break;
 		if (Data->Disk.VolumeHandle == INVALID_HANDLE_VALUE) break;
 
 		/* Fetch a block of cluster data. */
 		BitmapParam.StartingLcn.QuadPart = Lcn;
+
 		ErrorCode = DeviceIoControl(Data->Disk.VolumeHandle,FSCTL_GET_VOLUME_BITMAP,
 			&BitmapParam,sizeof(BitmapParam),&BitmapData,sizeof(BitmapData),&w,NULL);
-		if (ErrorCode != 0) {
+
+		if (ErrorCode != 0)
+		{
 			ErrorCode = NO_ERROR;
-		} else {
+		}
+		else
+		{
 			ErrorCode = GetLastError();
 		}
+
 		if ((ErrorCode != NO_ERROR) && (ErrorCode != ERROR_MORE_DATA)) break;
 
 		/* Sanity check. */
@@ -1259,78 +1281,110 @@ void JKDefragGui::ShowDiskmap(struct DefragDataStruct *Data)
 		Lcn = BitmapData.StartingLcn;
 		Index = 0;
 		Mask = 1;
+
 		IndexMax = sizeof(BitmapData.Buffer);
+
 		if (BitmapData.BitmapSize / 8 < IndexMax) IndexMax = (int)(BitmapData.BitmapSize / 8);
-		while ((Index < IndexMax) && (*Data->Running == RUNNING)) {
+
+		while ((Index < IndexMax) && (*Data->Running == RUNNING))
+		{
 			InUse = (BitmapData.Buffer[Index] & Mask);
+
 			/* If at the beginning of the disk then copy the InUse value as our
 			starting value. */
 			if (Lcn == 0) PrevInUse = InUse;
+
 			/* At the beginning and end of an Exclude draw the cluster. */
 			if ((Lcn == Data->MftExcludes[0].Start) || (Lcn == Data->MftExcludes[0].End) ||
 				(Lcn == Data->MftExcludes[1].Start) || (Lcn == Data->MftExcludes[1].End) ||
-				(Lcn == Data->MftExcludes[2].Start) || (Lcn == Data->MftExcludes[2].End)) {
-					if ((Lcn == Data->MftExcludes[0].End) ||
-						(Lcn == Data->MftExcludes[1].End) ||
-						(Lcn == Data->MftExcludes[2].End))
-					{
-						DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORUNMOVABLE);
-					} else if (PrevInUse == 0) {
-						DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
-					} else {
-						DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
-					}
-					InUse = 1;
-					PrevInUse = 1;
-					ClusterStart = Lcn;
+				(Lcn == Data->MftExcludes[2].Start) || (Lcn == Data->MftExcludes[2].End))
+			{
+				if ((Lcn == Data->MftExcludes[0].End) ||
+					(Lcn == Data->MftExcludes[1].End) ||
+					(Lcn == Data->MftExcludes[2].End))
+				{
+					DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORUNMOVABLE);
+				}
+				else
+				if (PrevInUse == 0)
+				{
+					DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
+				}
+				else
+				{
+					DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
+				}
+
+				InUse = 1;
+				PrevInUse = 1;
+				ClusterStart = Lcn;
 			}
-			if ((PrevInUse == 0) && (InUse != 0)) {          /* Free */
+
+			if ((PrevInUse == 0) && (InUse != 0))          /* Free */
+			{
 				DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
+
 				ClusterStart = Lcn;
 			}
-			if ((PrevInUse != 0) && (InUse == 0)) {          /* In use */
+
+			if ((PrevInUse != 0) && (InUse == 0))          /* In use */
+			{
 				DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
+
 				ClusterStart = Lcn;
 			}
+
 			PrevInUse = InUse;
-			if (Mask == 128) {
+
+			if (Mask == 128)
+			{
 				Mask = 1;
 				Index = Index + 1;
-			} else {
+			}
+			else
+			{
 				Mask = Mask << 1;
 			}
+
 			Lcn = Lcn + 1;
 		}
+	} while ((ErrorCode == ERROR_MORE_DATA) && (Lcn < BitmapData.StartingLcn + BitmapData.BitmapSize));
 
-	} while ((ErrorCode == ERROR_MORE_DATA) &&
-		(Lcn < BitmapData.StartingLcn + BitmapData.BitmapSize));
-
-	if ((Lcn > 0)/* && (*Data->RedrawScreen == 2)*/) {
-		if (PrevInUse == 0) {          /* Free */
+	if ((Lcn > 0)/* && (*Data->RedrawScreen == 2)*/)
+	{
+		if (PrevInUse == 0)          /* Free */
+		{
 			DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLOREMPTY);
 		}
-		if (PrevInUse != 0) {          /* In use */
+
+		if (PrevInUse != 0)          /* In use */
+		{
 			DrawCluster(Data,ClusterStart,Lcn,JKDefragStruct::COLORALLOCATED);
 		}
 	}
 
 	/* Show the MFT zones. */
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 3; i++)
+	{
 //		if (*Data->RedrawScreen != 2) break;
 		if (Data->MftExcludes[i].Start <= 0) continue;
-		DrawCluster(Data,Data->MftExcludes[i].Start,Data->MftExcludes[i].End,JKDefragStruct::COLORMFT);
+
+		DrawCluster(Data,Data->MftExcludes[i].Start, Data->MftExcludes[i].End, JKDefragStruct::COLORMFT);
 	}
 
 	/* Colorize all the files on the screen.
 	Note: the "$BadClus" file on NTFS disks maps the entire disk, so we have to
 	ignore it. */
-	for (Item = TreeSmallest(Data->ItemTree); Item != NULL; Item = TreeNext(Item)) {
+	for (Item = m_jkLib->TreeSmallest(Data->ItemTree); Item != NULL; Item = m_jkLib->TreeNext(Item))
+	{
 		if (*Data->Running != RUNNING) break;
 //		if (*Data->RedrawScreen != 2) break;
+
 		if ((Item->LongFilename != NULL) &&
 			((_wcsicmp(Item->LongFilename,L"$BadClus") == 0) ||
 			(_wcsicmp(Item->LongFilename,L"$BadClus:$Bad:$DATA") == 0))) continue;
-		ColorizeItem(Data,Item,0,0,NO);
+
+		m_jkLib->ColorizeItem(Data,Item,0,0,NO);
 	}
 
 	/* Set the flag to "no". */
