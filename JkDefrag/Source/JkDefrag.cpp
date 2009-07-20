@@ -20,27 +20,93 @@ http://www.kessels.com/
 
 #include "StdAfx.h"
 
-#include "JKDefragLog.h"
-#include "JKDefragStruct.h"
-#include "JkDefragGui.h"
-#include "JKDefragLib.h"
 #include "JKDefrag.h"
 
-JKDefragStruct *jkStruct = NULL;
-JKDefragLog *jkLog = NULL;
+JKDefrag *JKDefrag::m_jkDefrag = 0;
 
-static JKDefragGui *m_jkGui = JKDefragGui::getInstance();
-static JKDefragLib *m_jkLib = JKDefragLib::getInstance();
+JKDefrag::JKDefrag()
+{
+	Running = STOPPED;
+
+	Debug = 1;
+
+	m_jkGui = JKDefragGui::getInstance();
+	m_jkLib = JKDefragLib::getInstance();
+
+	m_jkLog = new JKDefragLog();
+	m_jkStruct = new JKDefragStruct();
+}
+
+JKDefrag::~JKDefrag()
+{
+	delete m_jkLog;
+	delete m_jkStruct;
+
+	delete m_jkDefrag;
+}
+
+JKDefrag *JKDefrag::getInstance()
+{
+	if (m_jkDefrag == NULL)
+	{
+		m_jkDefrag = new JKDefrag();
+	}
+
+	return m_jkDefrag;
+}
+
+void JKDefrag::releaseInstance()
+{
+	if (m_jkDefrag != NULL)
+	{
+		delete m_jkDefrag;
+	}
+}
+
+WPARAM JKDefrag::startProgram(HINSTANCE hInstance,
+							  HINSTANCE hPrevInstance,
+							  LPSTR lpCmdLine,
+							  int nCmdShow)
+{
+	IamRunning = RUNNING;
+
+	/* Test if another instance is already running. */
+	if (AlreadyRunning() == YES) return(0);
 
 #ifdef _DEBUG
-/* Write a crash report to the log.
+	/* Setup crash report handler. */
+	SetUnhandledExceptionFilter(&JKDefrag::CrashReport);
+#endif
+
+	m_jkGui->Initialize(hInstance,nCmdShow, m_jkLog, Debug);
+
+	/* Start up the defragmentation and timer threads. */
+	if (CreateThread(NULL, 0, &JKDefrag::DefragThread, NULL, 0, NULL) == NULL) return(0);
+
+	WPARAM wParam = m_jkGui->DoModal();
+
+	/* If the defragger is still running then ask & wait for it to stop. */
+	IamRunning = STOPPED;
+
+	m_jkLib->StopJkDefrag(&Running,0);
+
+	return wParam;
+}
+
+
+#ifdef _DEBUG
+
+/*
+
+Write a crash report to the log.
 To test the crash handler add something like this:
 char *p1;
 p1 = 0;
 *p1 = 0;
+
 */
 
-LONG __stdcall CrashReport(EXCEPTION_POINTERS *ExceptionInfo)
+LONG __stdcall JKDefrag::CrashReport(EXCEPTION_POINTERS *ExceptionInfo)
 {
 	IMAGEHLP_LINE64 SourceLine;
 	DWORD LineDisplacement;
@@ -50,6 +116,9 @@ LONG __stdcall CrashReport(EXCEPTION_POINTERS *ExceptionInfo)
 	int FrameNumber;
 	char s1[BUFSIZ];
 	WCHAR s2[BUFSIZ];
+
+	JKDefragLog *jkLog = m_jkDefrag->m_jkLog;
+	JKDefragLib *jkLib = m_jkDefrag->m_jkLib;
 
 	/* Exit if we're running inside a debugger. */
 	//  if (IsDebuggerPresent() == TRUE) return(EXCEPTION_EXECUTE_HANDLER);
@@ -98,7 +167,7 @@ LONG __stdcall CrashReport(EXCEPTION_POINTERS *ExceptionInfo)
 
 	if (Result == FALSE)
 	{
-		m_jkLib->SystemErrorStr(GetLastError(),s2,BUFSIZ);
+		jkLib->SystemErrorStr(GetLastError(),s2,BUFSIZ);
 
 		jkLog->LogMessage(L"  Failed to initialize SymInitialize(): %s",s2);
 
@@ -172,7 +241,7 @@ The main thread that performs all the work. Interpret the commandline
 parameters and call the defragger library.
 
 */
-DWORD WINAPI DefragThread(LPVOID)
+DWORD WINAPI JKDefrag::DefragThread(LPVOID)
 {
 	int QuitOnFinish;
 	int OptimizeMode;                /* 1...11 */
@@ -187,6 +256,11 @@ DWORD WINAPI DefragThread(LPVOID)
 	struct tm NowTm;
 	OSVERSIONINFO OsVersion;
 	int i;
+
+	JKDefragLog *jkLog = m_jkDefrag->m_jkLog;
+	JKDefragStruct *jkStruct = m_jkDefrag->m_jkStruct;
+	JKDefragGui *jkGui = m_jkDefrag->m_jkGui;
+	JKDefragLib *jkLib = m_jkDefrag->m_jkLib;
 
 	/* Setup the defaults. */
 	OptimizeMode = 2;
@@ -249,7 +323,7 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (i >= argc)
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-a\" commandline argument.");
+					jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-a\" commandline argument.");
 
 					continue;
 				}
@@ -258,14 +332,14 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if ((OptimizeMode < 1) || (OptimizeMode > 11))
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-a\" commandline argument is invalid.");
+					jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-a\" commandline argument is invalid.");
 
 					OptimizeMode = 3;
 				}
 
 				OptimizeMode = OptimizeMode - 1;
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-a' accepted, optimizemode = %u",OptimizeMode+1);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-a' accepted, optimizemode = %u",OptimizeMode+1);
 
 				continue;
 			}
@@ -276,14 +350,14 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if ((OptimizeMode < 1) || (OptimizeMode > 11))
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-a\" commandline argument is invalid.");
+					jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-a\" commandline argument is invalid.");
 
 					OptimizeMode = 3;
 				}
 
 				OptimizeMode = OptimizeMode - 1;
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-a' accepted, optimizemode = %u",OptimizeMode+1);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-a' accepted, optimizemode = %u",OptimizeMode+1);
 
 				continue;
 			}
@@ -294,7 +368,7 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (i >= argc)
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-s\" commandline argument.");
+					jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-s\" commandline argument.");
 
 					continue;
 				}
@@ -303,12 +377,12 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if ((Speed < 1) || (Speed > 100))
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-s\" commandline argument is invalid.");
+					jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-s\" commandline argument is invalid.");
 
 					Speed = 100;
 				}
 
-			    m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-s' accepted, speed = %u%%",Speed);
+			    jkGui->ShowDebug(0,NULL,L"Commandline argument '-s' accepted, speed = %u%%",Speed);
 
 				continue;
 			}
@@ -319,12 +393,12 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if ((Speed < 1) || (Speed > 100))
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-s\" commandline argument is invalid.");
+					jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-s\" commandline argument is invalid.");
 
 					Speed = 100;
 				}
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-s' accepted, speed = %u%%",Speed);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-s' accepted, speed = %u%%",Speed);
 
 				continue;
 			}
@@ -335,7 +409,7 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (i >= argc)
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-f\" commandline argument.");
+					jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-f\" commandline argument.");
 
 					continue;
 				}
@@ -344,12 +418,12 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if ((FreeSpace < 0) || (FreeSpace > 100))
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-f\" commandline argument is invalid.");
+					jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-f\" commandline argument is invalid.");
 
 					FreeSpace = 1;
 				}
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-f' accepted, freespace = %0.1f%%",FreeSpace);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-f' accepted, freespace = %0.1f%%",FreeSpace);
 
 				continue;
 			}
@@ -360,12 +434,12 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if ((FreeSpace < 0) || (FreeSpace > 100))
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-f\" command line argument is invalid.");
+					jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-f\" command line argument is invalid.");
 
 					FreeSpace = 1;
 				}
 
-				m_jkGui->ShowDebug(0,NULL,L"Command line argument '-f' accepted, free space = %0.1f%%",FreeSpace);
+				jkGui->ShowDebug(0,NULL,L"Command line argument '-f' accepted, free space = %0.1f%%",FreeSpace);
 
 				continue;
 			}
@@ -376,21 +450,21 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (i >= argc)
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-d\" commandline argument.");
+					jkGui->ShowDebug(0,NULL,L"Error: you have not specified a number after the \"-d\" commandline argument.");
 
 					continue;
 				}
 
-				Debug = _wtol(argv[i]);
+				m_jkDefrag->Debug = _wtol(argv[i]);
 
-				if ((Debug < 0) || (Debug > 6))
+				if ((m_jkDefrag->Debug < 0) || (m_jkDefrag->Debug > 6))
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-d\" commandline argument is invalid.");
+					jkGui->ShowDebug(0,NULL,L"Error: the number after the \"-d\" commandline argument is invalid.");
 
-					Debug = 1;
+					m_jkDefrag->Debug = 1;
 				}
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-d' accepted, debug = %u",Debug);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-d' accepted, debug = %u",m_jkDefrag->Debug);
 
 				continue;
 			}
@@ -398,9 +472,9 @@ DWORD WINAPI DefragThread(LPVOID)
 			if ((wcsncmp(argv[i],L"-d",2) == 0) && (wcslen(argv[i]) == 3) &&
 				(argv[i][2] >= '0') && (argv[i][2] <= '6'))
 			{
-				Debug = _wtol(&argv[i][2]);
+				m_jkDefrag->Debug = _wtol(&argv[i][2]);
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-d' accepted, debug = %u",Debug);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-d' accepted, debug = %u",m_jkDefrag->Debug);
 
 				continue;
 			}
@@ -411,7 +485,7 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (i >= argc)
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: you have not specified a filename after the \"-l\" commandline argument.");
+					jkGui->ShowDebug(0,NULL,L"Error: you have not specified a filename after the \"-l\" commandline argument.");
 
 					continue;
 				}
@@ -420,11 +494,11 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (*LogFile != '\0')
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile = %s",LogFile);
+					jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile = %s",LogFile);
 				}
 				else
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile turned off");
+					jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile turned off");
 				}
 
 				continue;
@@ -436,11 +510,11 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (*LogFile != '\0')
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile = %s",LogFile);
+					jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile = %s",LogFile);
 				}
 				else
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile turned off");
+					jkGui->ShowDebug(0,NULL,L"Commandline argument '-l' accepted, logfile turned off");
 				}
 
 				continue;
@@ -452,23 +526,23 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (i >= argc)
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: you have not specified a mask after the \"-e\" commandline argument.");
+					jkGui->ShowDebug(0,NULL,L"Error: you have not specified a mask after the \"-e\" commandline argument.");
 
 					continue;
 				}
 
-				Excludes = m_jkLib->AddArrayString(Excludes,argv[i]);
+				Excludes = jkLib->AddArrayString(Excludes,argv[i]);
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-e' accepted, added '%s' to the excludes",argv[i]);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-e' accepted, added '%s' to the excludes",argv[i]);
 
 				continue;
 			}
 
 			if ((wcsncmp(argv[i],L"-e",2) == 0) && (wcslen(argv[i]) >= 3))
 			{
-				Excludes = m_jkLib->AddArrayString(Excludes,&argv[i][2]);
+				Excludes = jkLib->AddArrayString(Excludes,&argv[i][2]);
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-e' accepted, added '%s' to the excludes",&argv[i][2]);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-e' accepted, added '%s' to the excludes",&argv[i][2]);
 
 				continue;
 			}
@@ -479,23 +553,23 @@ DWORD WINAPI DefragThread(LPVOID)
 
 				if (i >= argc)
 				{
-					m_jkGui->ShowDebug(0,NULL,L"Error: you have not specified a mask after the \"-u\" commandline argument.");
+					jkGui->ShowDebug(0,NULL,L"Error: you have not specified a mask after the \"-u\" commandline argument.");
 
 					continue;
 				}
 
-				SpaceHogs = m_jkLib->AddArrayString(SpaceHogs,argv[i]);
+				SpaceHogs = jkLib->AddArrayString(SpaceHogs,argv[i]);
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-u' accepted, added '%s' to the spacehogs",argv[i]);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-u' accepted, added '%s' to the spacehogs",argv[i]);
 
 				continue;
 			}
 
 			if ((wcsncmp(argv[i],L"-u",2) == 0) && (wcslen(argv[i]) >= 3))
 			{
-				SpaceHogs = m_jkLib->AddArrayString(SpaceHogs,&argv[i][2]);
+				SpaceHogs = jkLib->AddArrayString(SpaceHogs,&argv[i][2]);
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-u' accepted, added '%s' to the spacehogs",&argv[i][2]);
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-u' accepted, added '%s' to the spacehogs",&argv[i][2]);
 
 				continue;
 			}
@@ -504,14 +578,14 @@ DWORD WINAPI DefragThread(LPVOID)
 			{
 				QuitOnFinish = YES;
 
-				m_jkGui->ShowDebug(0,NULL,L"Commandline argument '-q' accepted, quitonfinish = yes");
+				jkGui->ShowDebug(0,NULL,L"Commandline argument '-q' accepted, quitonfinish = yes");
 
 				continue;
 			}
 
 			if (argv[i][0] == '-')
 			{
-				m_jkGui->ShowDebug(0,NULL,L"Error: commandline argument not recognised: %s",argv[i]);
+				jkGui->ShowDebug(0,NULL,L"Error: commandline argument not recognised: %s",argv[i]);
 			}
 		}
 	}
@@ -523,7 +597,7 @@ DWORD WINAPI DefragThread(LPVOID)
 	{
 		for (i = 1; i < argc; i++)
 		{
-			if (IamRunning != RUNNING) break;
+			if (m_jkDefrag->IamRunning != RUNNING) break;
 
 			if ((wcscmp(argv[i],L"-a") == 0) ||
 				(wcscmp(argv[i],L"-e") == 0) ||
@@ -540,7 +614,7 @@ DWORD WINAPI DefragThread(LPVOID)
 			if (*argv[i] == '-') continue;
 			if (*argv[i] == '\0') continue;
 
-			m_jkLib->RunJkDefrag(argv[i],OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
+			jkLib->RunJkDefrag(argv[i],OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&m_jkDefrag->Running,
 				/*&JKDefragGui::getInstance()->RedrawScreen,*/NULL);
 
 			DoAllVolumes = NO;
@@ -548,9 +622,9 @@ DWORD WINAPI DefragThread(LPVOID)
 	}
 
 	/* If no paths are specified on the commandline then defrag all fixed harddisks. */
-	if ((DoAllVolumes == YES) && (IamRunning == RUNNING))
+	if ((DoAllVolumes == YES) && (m_jkDefrag->IamRunning == RUNNING))
 	{
-		m_jkLib->RunJkDefrag(NULL,OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&Running,
+		jkLib->RunJkDefrag(NULL,OptimizeMode,Speed,FreeSpace,Excludes,SpaceHogs,&m_jkDefrag->Running,
 			/*&JKDefragGui::getInstance()->RedrawScreen,*/NULL);
 	}
 
@@ -561,10 +635,14 @@ DWORD WINAPI DefragThread(LPVOID)
 	return(0);
 }
 
-/* If the defragger is not yet running then return NO. If it's already
+/*
+
+If the defragger is not yet running then return NO. If it's already
 running or if there was an error getting the processlist then return
-YES. */
-int AlreadyRunning(void)
+YES.
+
+*/
+int JKDefrag::AlreadyRunning(void)
 {
 	HANDLE Snapshot;
 	PROCESSENTRY32 pe32;
@@ -644,49 +722,18 @@ int AlreadyRunning(void)
 }
 
 
-
-
-int __stdcall WinMain(
-					  HINSTANCE hInstance,
-					  HINSTANCE hPrevInstance,
-					  LPSTR lpCmdLine,
-					  int nCmdShow)
+int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-	Debug = 5;
+	JKDefrag *jkDefrag = JKDefrag::getInstance();
 
-	jkLog = new JKDefragLog();
+	WPARAM retValue = 0;
 
-	/* Initialize. */
-	jkStruct = new JKDefragStruct();
-
-	IamRunning = RUNNING;
-
-#ifdef _DEBUG
-	/* Setup crash report handler. */
-	SetUnhandledExceptionFilter(CrashReport);
-#endif
-
-	/* Test if another instance is already running. */
-	if (AlreadyRunning() == YES) return(0);
-
-	/* Create the Window. */
-	if (hPrevInstance == NULL)
+	if (jkDefrag != NULL)
 	{
-		m_jkGui->Initialize(hInstance,nCmdShow, jkLog, Debug);
+		retValue = jkDefrag->startProgram(hInstance,hPrevInstance,lpCmdLine,nCmdShow);
+
+		JKDefrag::releaseInstance();
 	}
 
-	/* Start up the defragmentation and timer threads. */
-	if (CreateThread(NULL,0,&DefragThread,NULL,0,NULL) == NULL) return(0);
-
-	WPARAM wParam = m_jkGui->DoModal();
-
-	/* If the defragger is still running then ask & wait for it to stop. */
-	IamRunning = STOPPED;
-
-	m_jkLib->StopJkDefrag(&Running,0);
-
-	delete jkStruct;
-	delete jkLog;
-
-	return((int)wParam);
+	return((int)retValue);
 }

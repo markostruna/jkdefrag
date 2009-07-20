@@ -1,9 +1,11 @@
 #include "StdAfx.h"
 
+/*
 #include "JKDefragStruct.h"
 #include "JKDefragLog.h"
 #include "JkDefragLib.h"
 #include "JkDefragGui.h"
+*/
 
 JKDefragGui *JKDefragGui::m_jkDefragGui = 0;
 
@@ -19,8 +21,8 @@ JKDefragGui::JKDefragGui()
 //	m_clusterSquares = NULL;
 	m_numDiskSquares = 0;
 
-	m_offsetX = 6;
-	m_offsetY = 6;
+	m_offsetX = 26;
+	m_offsetY = 16;
 
 	clusterInfo = NULL;
 	m_numClusters = 1;
@@ -798,6 +800,14 @@ void JKDefragGui::PaintImage(HDC hdc)
 		swprintf_s(Messages[2],50000,L"%.4f%%",100 * Done);
 	}
 
+	Color backColor1;
+	backColor1.SetFromCOLORREF(RGB(0, 0, 255));
+
+	Color backColor2;
+	backColor2.SetFromCOLORREF(RGB(255, 0, 0));
+
+	LinearGradientBrush bgBrush(windowSize,Color::DarkBlue,Color::LightBlue,LinearGradientModeForwardDiagonal);
+
 	drawArea = windowSize;
 
 	drawArea.Height = m_topHeight + 1;
@@ -807,7 +817,10 @@ void JKDefragGui::PaintImage(HDC hdc)
 
 	SolidBrush busyBrush(busyColor);
 
+/*
 	graphics->FillRectangle(&busyBrush, drawArea);
+*/
+	graphics->FillRectangle(&bgBrush, drawArea);
 
 	SolidBrush brush(Color::White);
 
@@ -849,22 +862,36 @@ void JKDefragGui::PaintImage(HDC hdc)
 	int xx2 = xx1 + m_numDiskSquaresX * m_squareSize + 1;
 	int yy2 = yy1 + m_numDiskSquaresY * m_squareSize + 1;
 
+/*
 	Color bottomPartColor;
 	bottomPartColor.SetFromCOLORREF(Colors[JKDefragStruct::COLORBUSY]);
 
 	SolidBrush bottomPartBrush(bottomPartColor);
+*/
 
 	drawArea = Rect(0, m_topHeight + 1, m_clientWindowSize.Width, yy1 - m_topHeight - 2);
+/*
 	graphics->FillRectangle(&bottomPartBrush, drawArea);
+*/
+	graphics->FillRectangle(&bgBrush, drawArea);
 
 	drawArea = Rect(0, yy2 + 2, m_clientWindowSize.Width, m_clientWindowSize.Height - yy2 - 2);
+/*
 	graphics->FillRectangle(&bottomPartBrush, drawArea);
+*/
+	graphics->FillRectangle(&bgBrush, drawArea);
 
 	drawArea = Rect(0, yy1 - 1, xx1 - 1, yy2 - yy1 + 3);
+/*
 	graphics->FillRectangle(&bottomPartBrush, drawArea);
+*/
+	graphics->FillRectangle(&bgBrush, drawArea);
 
 	drawArea = Rect(xx2, yy1 - 1, m_clientWindowSize.Width - xx2, yy2 - yy1 + 3);
+/*
 	graphics->FillRectangle(&bottomPartBrush, drawArea);
+*/
+	graphics->FillRectangle(&bgBrush, drawArea);
 
 	Pen pen1(Color(0,0,0));
 	Pen pen2(Color(255,255,255));
@@ -1007,9 +1034,45 @@ void JKDefragGui::PaintImage(HDC hdc)
 
 void JKDefragGui::OnPaint(HDC hdc)
 {
+/*
+	Bitmap bmp(m_clientWindowSize.Width, m_clientWindowSize.Height);
+
+	Graphics *graphics2 = Graphics::FromImage(&bmp);
+*/
+
 	Graphics graphics(hdc);
 
+/*
+	graphics2->DrawImage(m_bmp,0,0);
+*/
+
+/*
+	Color busyColor(128,128,128,128);
+
+	SolidBrush busyBrush(busyColor);
+
+	Rect rr = Rect(100, 100, 400, 100);
+
+	graphics2->FillRectangle(&busyBrush, rr);
+
+	SolidBrush brush(Color::White);
+
+	FontFamily fontFamily(L"Tahoma");
+	Font       font(&fontFamily,12,FontStyleRegular, UnitPixel);
+	PointF     pointF(132.0f, 120.0f);
+
+	WCHAR      *text;
+
+	text = Messages[2];
+
+	graphics2->DrawString(text, -1, &font, pointF, &brush);
+*/
+
 	graphics.DrawImage(m_bmp,0,0);
+
+/*
+	delete graphics2;
+*/
 
 	return;
 }
