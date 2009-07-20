@@ -22,22 +22,10 @@ http://www.kessels.com/
 
 #include "StdAfx.h"
 
-#include "ScanNtfs.h"
-#include "ScanFat.h"
-#include "JkDefragLib.h"
-#include "JKDefragStruct.h"
-#include "JKDefragLog.h"
-#include "JkDefragGui.h"
-
 JKDefragLib *JKDefragLib::m_jkDefragLib = 0;
 
 JKDefragLib::JKDefragLib()
 {
-/*
-	m_jkGui      = JKDefragGui::getInstance();
-	m_jkScanFat  = JKScanFat::getInstance();
-	m_jkScanNtfs = JKScanNtfs::getInstance();
-*/
 }
 
 JKDefragLib::~JKDefragLib()
@@ -305,9 +293,13 @@ int JKDefragLib::MatchMask(WCHAR *String, WCHAR *Mask)
 	return NO;
 }
 
-/* Add a string to a string array. If the array is empty then initialize, the
+/*
+
+Add a string to a string array. If the array is empty then initialize, the
 last item in the array is NULL. If the array is not empty then append the
-new string, realloc() the array. */
+new string, realloc() the array.
+
+*/
 WCHAR **JKDefragLib::AddArrayString(WCHAR **Array, WCHAR *NewString)
 {
 	WCHAR **NewArray;
@@ -5688,7 +5680,6 @@ void JKDefragLib::RunJkDefrag(
 				WCHAR **Excludes,
 				WCHAR **SpaceHogs,
 				int *Running,
-//				int *RedrawScreen,
 				WCHAR **DebugMsg)
 {
 	struct DefragDataStruct Data;

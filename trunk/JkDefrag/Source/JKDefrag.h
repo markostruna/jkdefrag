@@ -2,11 +2,34 @@
 #ifndef JKDEFRAG
 #define JKDEFRAG
 
-int Running = STOPPED;           /* If not RUNNING then stop defragging. */
+class JKDefrag
+{
+public:
+	JKDefrag();
+	~JKDefrag();
 
-int IamRunning;
+	// Get instance of the class
+	static JKDefrag *getInstance();
+	static void releaseInstance();
 
-/* Debug level.
+	WPARAM startProgram(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow);
+
+	static DWORD WINAPI DefragThread(LPVOID);
+
+#ifdef _DEBUG
+
+	static LONG __stdcall CrashReport(EXCEPTION_POINTERS *ExceptionInfo);
+
+#endif
+
+	int AlreadyRunning(void);
+
+protected:
+private:
+	int Running;           /* If not RUNNING then stop defragging. */
+	int IamRunning;
+
+	/* Debug level.
 	0: Fatal errors.
 	1: Warning messages.
 	2: General progress messages.
@@ -14,7 +37,16 @@ int IamRunning;
 	4: Detailed file information.
 	5: Detailed gap-filling messages.
 	6: Detailed gap-finding messages.
-*/
-int Debug = 1;
+	*/
+	int Debug;
+
+	JKDefragGui *m_jkGui;
+	JKDefragLib *m_jkLib;
+	JKDefragLog *m_jkLog;
+	JKDefragStruct *m_jkStruct;
+
+	// static member that is an instance of itself
+	static JKDefrag *m_jkDefrag;
+};
 
 #endif

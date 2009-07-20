@@ -1,10 +1,12 @@
 #include "StdAfx.h"
 
+/*
 #include "JkDefragLib.h"
 #include "JKDefragStruct.h"
 #include "JKDefragLog.h"
 #include "JkDefragGui.h"
 #include "ScanNtfs.h"
+*/
 
 JKScanNtfs *JKScanNtfs::m_jkScanNtfs = 0;
 
